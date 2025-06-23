@@ -40,15 +40,14 @@ from OCP.BRepLProp import BRepLProp_SLProps
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.BRepTools import BRepTools
 from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
-from OCP.GeomConvert import GeomConvert_SurfaceToBSplineSurface
+from OCP.GeomConvert import GeomConvert
 from OCP.GeomLProp import GeomLProp_SLProps
 from OCP.gp import gp, gp_Dir, gp_Pln, gp_Pnt, gp_Pnt2d, gp_Trsf, gp_Vec, gp_XYZ
 
 # from OCP.Standard import Standard_Real
 from OCP.IFSelect import IFSelect_RetDone
 from OCP.IMeshTools import IMeshTools_Parameters
-from OCP.Interface import Interface_Static_SetIVal
-from OCP.Poly import poly
+from OCP.Interface import Interface_Static
 from OCP.Quantity import Quantity_Color, Quantity_TOC_RGB
 from OCP.STEPCAFControl import STEPCAFControl_Reader
 from OCP.STEPControl import STEPControl_Reader
@@ -62,27 +61,21 @@ from OCP.TopAbs import (
     TopAbs_EDGE,
     TopAbs_FACE,
     TopAbs_FORWARD,
-    TopAbs_INTERNAL,
     TopAbs_REVERSED,
     TopAbs_SHELL,
     TopAbs_SOLID,
     TopAbs_VERTEX,
     TopAbs_WIRE,
-    topabs_ShapeTypeToString,
 )
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopLoc import TopLoc_Location
 
 # from OCP.TopExp import topexp_MapShapes
 # from OCP.TopTools import TopTools_MapOfShape, TopTools_IndexedMapOfShape
-from OCP.TopoDS import TopoDS_Shape, topods
-from OCP.XCAFApp import XCAFApp_Application_GetApplication
+from OCP.TopoDS import TopoDS_Shape, TopoDS
+from OCP.XCAFApp import XCAFApp_Application
 from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ColorGen, XCAFDoc_ColorSurf, XCAFDoc_ColorCurv
 from OCP.XSControl import XSControl_WorkSession
-
-import OCC
-
-print("--> STEPper OpenCASCADE version:", OCC.VERSION)
 
 
 def b_colorname(col):
@@ -122,7 +115,7 @@ def nurbs_parse(current_face):
     result_shape = nurbs_converter.Shape()
     _test_shape(result_shape)
     brep_face = BRep_Tool.Surface(topods.Face(result_shape))
-    occ_face = GeomConvert_SurfaceToBSplineSurface(brep_face)
+    occ_face = GeomConvert.SurfaceToBSplineSurface(brep_face)
     # _test_shape(occ_face)
 
     # extract the Control Points of each face
@@ -391,7 +384,7 @@ class ReadSTEP:
 
         # https://dev.opencascade.org/content/loading-step-file-crashes-edgeloop
         # Default is 1, try also 0
-        # Interface_Static_SetIVal("read.surfacecurve.mode", 3)
+        # Interface_Static.SetVal("read.surfacecurve.mode", 3)
 
         # read units
         ulen_names = TColStd_SequenceOfAsciiString()
@@ -463,7 +456,7 @@ class ReadSTEP:
 
         # Create the application, empty document and shape_tool
         doc = TDocStd_Document("STEP")
-        app = XCAFApp_Application_GetApplication()
+        app = XCAFApp_Application.GetApplication()
         app.NewDocument("MDTV-XCAF", doc)
 
         # Read file and return populated doc
@@ -610,9 +603,6 @@ class ReadSTEP:
             # Mesh error, no triangulation found for part
             self.import_problems["Triangulation"] += 1
             return None
-
-        normcalc = poly()
-        normcalc.ComputeNormals(facing)
 
         # nsurf = bt.Surface(face)
         surface = BRepAdaptor_Surface(face)
@@ -765,7 +755,7 @@ class ReadSTEP:
             # Iterate through faces with TopExp_Explorer
             while ex.More():
                 exc = ex.Current()
-                face = topods.Face(exc)
+                face = TopoDS.Face_s(exc)
 
                 mesh = self.triangulate_face(face, trf)
                 if mesh:

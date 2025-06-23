@@ -1,0 +1,41 @@
+schema_version = "1.0.0"
+
+id = "stepper_open"
+version = "2.0.0"
+name = "STEPper"
+tagline = "STEP OpenCASCADE import. Fork from Ambi"
+maintainer = "Romain Guimbal"
+type = "add-on"
+
+website = "https://github.com/RomainGuimbal/SurfacePsycho/wiki"
+
+tags = ["Modeling", "Import-Export", "Geometry Nodes"]
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:LGPL-3.0-or-later"]
+
+copyright = [""]
+
+platforms = ["windows-x64", "macos-x64", "macos-arm64", "linux-x64"]
+wheels = [
+  "./wheels/six-1.16.0-py2.py3-none-any.whl",
+  "./wheels/cadquery_ocp_novtk-7.8.1.1.post1-cp311-cp311-win_amd64.whl",
+  "./wheels/cadquery_ocp_novtk-7.8.1.1.post1-cp311-cp311-macosx_11_0_x86_64.whl",
+  "./wheels/cadquery_ocp_novtk-7.8.1.1.post1-cp311-cp311-macosx_11_0_arm64.whl",
+  "./wheels/cadquery_ocp_novtk-7.8.1.1.post1-cp311-cp311-manylinux_2_31_x86_64.whl"
+]
+
+[permissions]
+files = "Import STEP files"
+
+[build]
+paths_exclude_pattern = [
+  "__pycache__/",
+  "/.git/",
+  "/.vscode/",
+  "/.github/",
+  ".gitignore",
+  ".gitattributes",
+  "README.md",
+]

@@ -21,11 +21,11 @@ import time
 import sys
 
 import numpy as np
-import bmesh  # type: ignore
-import bpy  # type: ignore
-from bpy.props import StringProperty  # type: ignore
-from bpy_extras.io_utils import ImportHelper  # type: ignore
-from mathutils import Vector  # type: ignore
+import bmesh
+import bpy
+from bpy.props import StringProperty
+from bpy_extras.io_utils import ImportHelper
+from mathutils import Vector
 
 from .trimesh import TriMesh
 

@@ -549,7 +549,7 @@ class ReadSTEP:
             # print(" " * (2 * level) + lab.GetLabelName())
             master_leaf = tree.nodes[leaf_id]
             # l_comps = TDF_LabelSequence()
-            # self.shape_tool.GetComponents(lab, l_comps)
+            # self.shape_tool.GetComponents_s(lab, l_comps)
             if self.shape_tool.IsAssembly_s(lab):
                 # Get transform for pure transform (empty)
                 # Empty has eye transform, inherit global from parent
@@ -559,7 +559,7 @@ class ReadSTEP:
 
                 # Read contained shapes
                 l_c = TDF_LabelSequence()
-                self.shape_tool.GetComponents(lab, l_c)
+                self.shape_tool.GetComponents_s(lab, l_c)
                 for i in range(l_c.Length()):
                     label = l_c.Value(i + 1)
                     if self.shape_tool.IsReference(label):
@@ -714,7 +714,7 @@ class ReadSTEP:
         # Build triangulation
         d_nbtriangles = facing.NbTriangles()
         for t in range(1, d_nbtriangles + 1):
-            T1, T2, T3 = tri.Value(t).Get()
+            T1, T2, T3 = tri(t).Get()
 
             if face.Orientation() != TopAbs_FORWARD:
                 T1, T2 = T2, T1

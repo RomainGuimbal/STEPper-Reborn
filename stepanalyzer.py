@@ -100,7 +100,7 @@ class StepAnalyzer:
         # Get information from root label
         name = rootlabel.GetLabelName()
         entry = rootlabel.EntryDumpToString()
-        is_assy = self.shape_tool.IsAssembly(rootlabel)
+        is_assy = self.shape_tool.IsAssembly_s(rootlabel)
         if is_assy:
             # If 1st label at root holds an assembly, it is the Top Assy.
             # Through this label, the entire assembly is accessible.
@@ -137,7 +137,7 @@ class StepAnalyzer:
                 self.output += f"{self.uid}{indent}[{c_entry}] {c_name}"
                 self.output += f" => [{ref_entry}] {ref_name}\n"
                 self.uid += 1
-                if self.shape_tool.IsAssembly(ref_label):
+                if self.shape_tool.IsAssembly_s(ref_label):
                     self.indent += 1
                     ref_comps = TDF_LabelSequence()  # Components of Assy
                     subchilds = False

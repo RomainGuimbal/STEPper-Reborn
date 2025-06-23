@@ -80,7 +80,7 @@ from OCP.XSControl import XSControl_WorkSession
 
 
 def b_colorname(col):
-    return Quantity_Color.StringName(Quantity_Color.Name(col))
+    return Quantity_Color.StringName_s(Quantity_Color.Name(col))
 
 
 def b_XYZ(v):
@@ -333,7 +333,7 @@ class ReadSTEP:
                 print(b_colorname(tcol))
 
     def label_matrix(self, lab):
-        trsf = self.shape_tool.GetLocation(lab).Transformation()
+        trsf = self.shape_tool.GetLocation_s(lab).Transformation()
         matrix = np.eye(4, dtype=np.float32)
         for row in range(1, 4):
             for col in range(1, 5):
@@ -562,9 +562,9 @@ class ReadSTEP:
                 self.shape_tool.GetComponents_s(lab, l_c)
                 for i in range(l_c.Length()):
                     label = l_c.Value(i + 1)
-                    if self.shape_tool.IsReference(label):
+                    if self.shape_tool.IsReference_s(label):
                         label_reference = TDF_Label()
-                        self.shape_tool.GetReferredShape(label, label_reference)
+                        self.shape_tool.GetReferredShape_s(label, label_reference)
 
                         label_transform = self.label_matrix(label)
                         node = tree.add(master_leaf.index, label_reference)

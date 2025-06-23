@@ -91,7 +91,7 @@ class StepAnalyzer:
         # Find root label of step doc
         labels = TDF_LabelSequence()
         self.shape_tool.GetFreeShapes(labels)
-        print(f"Empty: {labels.IsEmpty()}")
+        print(f"Empty: {labels.IsEmpty_s()}")
         nbr = labels.Length()
         print("Analyzer roots:", nbr)
 
@@ -129,7 +129,7 @@ class StepAnalyzer:
             c_name = c_label.GetLabelName()
             c_entry = c_label.EntryDumpToString()
             ref_label = TDF_Label()  # label of referred shape (or assembly)
-            is_ref = self.shape_tool.GetReferredShape(c_label, ref_label)
+            is_ref = self.shape_tool.GetReferredShape_s(c_label, ref_label)
             if is_ref:  # just in case all components are not references
                 ref_entry = ref_label.EntryDumpToString()
                 ref_name = ref_label.GetLabelName()

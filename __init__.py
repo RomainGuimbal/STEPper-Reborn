@@ -18,7 +18,7 @@ bl_info = {
     "author": "ambi",
     "description": "STEP OpenCASCADE import",
     "blender": (4, 2, 0),
-    "version": (1, 1, 8),
+    "version": (2, 0, 0),
     "location": "3D View > Tools panel > Stepper",
     "category": "Import",
 }

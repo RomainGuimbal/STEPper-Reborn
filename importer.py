@@ -33,31 +33,31 @@ from . import trimesh
 from . import nurbs
 
 importlib.reload(trimesh)
-from OCC.Core.BRep import BRep_Tool
-from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
-from OCC.Core.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert, BRepBuilderAPI_Transform
-from OCC.Core.BRepLProp import BRepLProp_SLProps
-from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh
-from OCC.Core.BRepTools import breptools
-from OCC.Core.GeomAPI import GeomAPI_ProjectPointOnSurf
-from OCC.Core.GeomConvert import geomconvert_SurfaceToBSplineSurface
-from OCC.Core.GeomLProp import GeomLProp_SLProps
-from OCC.Core.gp import gp, gp_Dir, gp_Pln, gp_Pnt, gp_Pnt2d, gp_Trsf, gp_Vec, gp_XYZ
+from OCP.BRep import BRep_Tool
+from OCP.BRepAdaptor import BRepAdaptor_Surface
+from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert, BRepBuilderAPI_Transform
+from OCP.BRepLProp import BRepLProp_SLProps
+from OCP.BRepMesh import BRepMesh_IncrementalMesh
+from OCP.BRepTools import breptools
+from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
+from OCP.GeomConvert import geomconvert_SurfaceToBSplineSurface
+from OCP.GeomLProp import GeomLProp_SLProps
+from OCP.gp import gp, gp_Dir, gp_Pln, gp_Pnt, gp_Pnt2d, gp_Trsf, gp_Vec, gp_XYZ
 
-# from OCC.Core.Standard import Standard_Real
-from OCC.Core.IFSelect import IFSelect_RetDone
-from OCC.Core.IMeshTools import IMeshTools_Parameters
-from OCC.Core.Interface import Interface_Static_SetIVal
-from OCC.Core.Poly import poly
-from OCC.Core.Quantity import Quantity_Color, Quantity_TOC_RGB
-from OCC.Core.STEPCAFControl import STEPCAFControl_Reader
-from OCC.Core.STEPControl import STEPControl_Reader
+# from OCP.Standard import Standard_Real
+from OCP.IFSelect import IFSelect_RetDone
+from OCP.IMeshTools import IMeshTools_Parameters
+from OCP.Interface import Interface_Static_SetIVal
+from OCP.Poly import poly
+from OCP.Quantity import Quantity_Color, Quantity_TOC_RGB
+from OCP.STEPCAFControl import STEPCAFControl_Reader
+from OCP.STEPControl import STEPControl_Reader
 
-# from OCC.Core.TCollection import TCollection_ExtendedString
-from OCC.Core.TColStd import TColStd_SequenceOfAsciiString
-from OCC.Core.TDF import TDF_Label, TDF_LabelSequence
-from OCC.Core.TDocStd import TDocStd_Document
-from OCC.Core.TopAbs import (
+# from OCP.TCollection import TCollection_ExtendedString
+from OCP.TColStd import TColStd_SequenceOfAsciiString
+from OCP.TDF import TDF_Label, TDF_LabelSequence
+from OCP.TDocStd import TDocStd_Document
+from OCP.TopAbs import (
     TopAbs_COMPOUND,
     TopAbs_EDGE,
     TopAbs_FACE,
@@ -70,15 +70,15 @@ from OCC.Core.TopAbs import (
     TopAbs_WIRE,
     topabs_ShapeTypeToString,
 )
-from OCC.Core.TopExp import TopExp_Explorer
-from OCC.Core.TopLoc import TopLoc_Location
+from OCP.TopExp import TopExp_Explorer
+from OCP.TopLoc import TopLoc_Location
 
-# from OCC.Core.TopExp import topexp_MapShapes
-# from OCC.Core.TopTools import TopTools_MapOfShape, TopTools_IndexedMapOfShape
-from OCC.Core.TopoDS import TopoDS_Shape, topods
-from OCC.Core.XCAFApp import XCAFApp_Application_GetApplication
-from OCC.Core.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ColorGen, XCAFDoc_ColorSurf, XCAFDoc_ColorCurv
-from OCC.Core.XSControl import XSControl_WorkSession
+# from OCP.TopExp import topexp_MapShapes
+# from OCP.TopTools import TopTools_MapOfShape, TopTools_IndexedMapOfShape
+from OCP.TopoDS import TopoDS_Shape, topods
+from OCP.XCAFApp import XCAFApp_Application_GetApplication
+from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ColorGen, XCAFDoc_ColorSurf, XCAFDoc_ColorCurv
+from OCP.XSControl import XSControl_WorkSession
 
 import OCC
 

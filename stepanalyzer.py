@@ -25,13 +25,13 @@ STEP file. The structure is presented as an indented text outline."""
 
 # Modified 2024 Tommi Hyppänen same license
 
-from OCC.Core.IFSelect import IFSelect_RetDone
-from OCC.Core.STEPCAFControl import STEPCAFControl_Reader
-from OCC.Core.TCollection import TCollection_ExtendedString
-from OCC.Core.TDF import TDF_Label, TDF_LabelSequence
-from OCC.Core.TDocStd import TDocStd_Document
-from OCC.Core.XCAFApp import XCAFApp_Application_GetApplication
-from OCC.Core.XCAFDoc import XCAFDoc_DocumentTool
+from OCP.IFSelect import IFSelect_RetDone
+from OCP.STEPCAFControl import STEPCAFControl_Reader
+from OCP.TCollection import TCollection_ExtendedString
+from OCP.TDF import TDF_Label, TDF_LabelSequence
+from OCP.TDocStd import TDocStd_Document
+from OCP.XCAFApp import XCAFApp_Application_GetApplication
+from OCP.XCAFDoc import XCAFDoc_DocumentTool
 
 
 class StepAnalyzer:

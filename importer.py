@@ -38,9 +38,9 @@ from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert, BRepBuilderAPI_Transform
 from OCP.BRepLProp import BRepLProp_SLProps
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
-from OCP.BRepTools import breptools
+from OCP.BRepTools import BRepTools
 from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
-from OCP.GeomConvert import geomconvert_SurfaceToBSplineSurface
+from OCP.GeomConvert import GeomConvert_SurfaceToBSplineSurface
 from OCP.GeomLProp import GeomLProp_SLProps
 from OCP.gp import gp, gp_Dir, gp_Pln, gp_Pnt, gp_Pnt2d, gp_Trsf, gp_Vec, gp_XYZ
 
@@ -122,7 +122,7 @@ def nurbs_parse(current_face):
     result_shape = nurbs_converter.Shape()
     _test_shape(result_shape)
     brep_face = BRep_Tool.Surface(topods.Face(result_shape))
-    occ_face = geomconvert_SurfaceToBSplineSurface(brep_face)
+    occ_face = GeomConvert_SurfaceToBSplineSurface(brep_face)
     # _test_shape(occ_face)
 
     # extract the Control Points of each face
@@ -738,8 +738,6 @@ class ReadSTEP:
         iter_shapes = [shape] + self.sub_shapes[shape]
         iter_shapes.sort(key=lambda x: x.Checked())
 
-        brt = breptools()
-
         face_data = OrderedDict()
         batch = 0
 
@@ -753,7 +751,7 @@ class ReadSTEP:
                 col_name = ""
 
             # Clean all previous triangulations
-            brt.Clean(shp)
+            BRepTools.Clean(shp)
 
             # Subshape transforms can be different from the mainshape transform
             ex = TopExp_Explorer(shp, TopAbs_FACE)

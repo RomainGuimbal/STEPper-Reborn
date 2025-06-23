@@ -15,7 +15,7 @@ blender_version_min = "4.2.0"
 
 license = ["SPDX:LGPL-3.0-or-later"]
 
-copyright = [""]
+copyright = ["2025 Romain Guimbal"]
 
 platforms = ["windows-x64", "macos-x64", "macos-arm64", "linux-x64"]
 wheels = [

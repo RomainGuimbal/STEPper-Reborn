@@ -110,7 +110,7 @@ class StepAnalyzer:
             self.indent += 2
             top_comps = TDF_LabelSequence()  # Components of Top Assy
             subchilds = False
-            is_assy = self.shape_tool.GetComponents(rootlabel, top_comps, subchilds)
+            is_assy = self.shape_tool.GetComponents_s(rootlabel, top_comps, subchilds)
             self.output += f"Number of labels at root = {nbr}\n"
             if top_comps.Length():
                 self.find_components(top_comps)
@@ -141,7 +141,7 @@ class StepAnalyzer:
                     self.indent += 1
                     ref_comps = TDF_LabelSequence()  # Components of Assy
                     subchilds = False
-                    _ = self.shape_tool.GetComponents(ref_label, ref_comps, subchilds)
+                    _ = self.shape_tool.GetComponents_s(ref_label, ref_comps, subchilds)
                     if ref_comps.Length():
                         self.find_components(ref_comps)
 

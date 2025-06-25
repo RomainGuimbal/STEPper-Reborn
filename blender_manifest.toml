@@ -9,7 +9,7 @@ type = "add-on"
 
 website = "https://github.com/RomainGuimbal/SurfacePsycho/wiki"
 
-tags = ["Modeling", "Import-Export", "Geometry Nodes"]
+tags = ["Import-Export"]
 
 blender_version_min = "4.2.0"
 

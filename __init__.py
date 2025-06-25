@@ -14,9 +14,9 @@
 # Copyright 2021 Tommi Hyppänen
 
 bl_info = {
-    "name": "STEPper",
-    "author": "ambi",
-    "description": "STEP OpenCASCADE import",
+    "name": "STEPper Reborn",
+    "author": "Romain Guimbal (maintainer), Ambi (original creator)",
+    "description": "STEP importer, OpenCASCADE-based",
     "blender": (4, 2, 0),
     "version": (2, 0, 0),
     "location": "3D View > Tools panel > Stepper",

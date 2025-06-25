@@ -1,9 +1,9 @@
 schema_version = "1.0.0"
 
-id = "stepper_open"
+id = "stepper-reborn"
 version = "2.0.0"
-name = "STEPper"
-tagline = "STEP OpenCASCADE import. Fork from Ambi"
+name = "STEPper Reborn"
+tagline = "CAD importer"
 maintainer = "Romain Guimbal"
 type = "add-on"
 
@@ -13,7 +13,7 @@ tags = ["Import-Export"]
 
 blender_version_min = "4.2.0"
 
-license = ["SPDX:LGPL-3.0-or-later"]
+license = ["SPDX:GPL-3.0-or-later"]
 
 copyright = ["2025 Romain Guimbal"]
 

@@ -1,4 +1,5 @@
 *.blend1
 *.pyc
+*.pdf
 
 __pycache__/

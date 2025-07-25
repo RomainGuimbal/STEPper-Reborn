@@ -580,7 +580,15 @@ def load_step(
             # link objects to tree
             if len(hierarchy_collections.items()) > 0:
                 for obj in created_objs:
-                    hierarchy_collections[obj["STEP_parent"]].objects.link(obj)
+                    parent_id = obj.get("STEP_parent", -1)
+                    if parent_id in hierarchy_collections:
+                        hierarchy_collections[parent_id].objects.link(obj)
+                    elif -1 in hierarchy_collections:
+                        # Link to root of hierarchy if the parent is unknown
+                        hierarchy_collections[-1].objects.link(obj)
+                    else:
+                        bpy.context.scene.collection.objects.link(obj)
+
                     global_t = tree.nodes[obj["STEP_tree_location"]].global_transform
                     set_obj_matrix_world(obj, global_t)
 

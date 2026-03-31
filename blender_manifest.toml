@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "stepper_reborn"
-version = "2.0.0"
+version = "2.1.0"
 name = "STEPper Reborn"
 tagline = "CAD importer"
 maintainer = "Romain Guimbal"
@@ -11,11 +11,11 @@ website = "https://github.com/RomainGuimbal/SurfacePsycho/wiki"
 
 tags = ["Import-Export"]
 
-blender_version_min = "4.2.0"
+blender_version_min = "5.1.0"
 
 license = ["SPDX:GPL-3.0-or-later"]
 
-copyright = ["2025 Romain Guimbal"]
+copyright = ["2026 Romain Guimbal"]
 
 platforms = ["windows-x64", "macos-x64", "macos-arm64", "linux-x64"]
 wheels = [

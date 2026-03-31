@@ -14,7 +14,6 @@
 # Created Date: Thursday, April 15th 2021, 4:38:48 pm
 # Copyright: Tommi Hyppänen
 
-import dataclasses
 import ntpath
 import os
 import time
@@ -25,7 +24,6 @@ import bmesh
 import bpy
 from bpy.props import StringProperty
 from bpy_extras.io_utils import ImportHelper
-from mathutils import Vector
 
 from .trimesh import TriMesh
 
@@ -98,7 +96,9 @@ def add_material(name, color, link_vertex_color=False, overwrite=False):
     return mat
 
 
-def bpy_update_object_data(objdata, bm, vcol_name, colors, uvs, norms, mat_names, build_materials=True):
+def bpy_update_object_data(
+    objdata, bm, vcol_name, colors, uvs, norms, mat_names, build_materials=True
+):
     if build_materials:
         # set colors and mats
         obj_mats = {}
@@ -130,7 +130,9 @@ def bpy_update_object_data(objdata, bm, vcol_name, colors, uvs, norms, mat_names
             if build_materials:
                 # Translate color into name, if not defined
                 if mat_col_name is None:
-                    mat_col_name = "STEP_" + "".join("{0:0{1}x}".format(int(mat_col[i] * 255), 2) for i in range(3))
+                    mat_col_name = "STEP_" + "".join(
+                        "{0:0{1}x}".format(int(mat_col[i] * 255), 2) for i in range(3)
+                    )
 
                 # If material doesn't exist, create it
                 if mat_col_name not in bpy.data.materials:
@@ -299,7 +301,9 @@ def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
     if bpy.context.scene.stepper.hack_skip_zero_solids:
         hacks.add("skip_solids")
 
-    mesh: TriMesh = step_reader.build_trimesh(shp, lin_def=lind, ang_def=angd, hacks=hacks)
+    mesh: TriMesh = step_reader.build_trimesh(
+        shp, lin_def=lind, ang_def=angd, hacks=hacks
+    )
 
     mesh.fuse_verts()
     mesh.filter_zero_area()
@@ -464,7 +468,9 @@ def load_step(
 
     wm.progress_begin(0, total)
     for i, (shp, node_index) in enumerate(all_shapes):
-        parent_uuid, self_uuid, tag, name, _, local_t, global_t = tree.nodes[node_index].get_values()
+        parent_uuid, self_uuid, tag, name, _, local_t, global_t = tree.nodes[
+            node_index
+        ].get_values()
 
         if name == "root":
             name = filename + ".empties"
@@ -475,7 +481,9 @@ def load_step(
 
         # Shape found in leaf
         if shp:
-            print("\nBuilding ({}/{}): {} ".format(i + 1, total, name), end="", flush=True)
+            print(
+                "\nBuilding ({}/{}): {} ".format(i + 1, total, name), end="", flush=True
+            )
             print("[T" + repr(shp.ShapeType()) + "]", end="", flush=True)
 
             # If object already build, just copy it, using linked mesh data
@@ -708,7 +716,9 @@ class ImportStepCADOperator(bpy.types.Operator, ImportHelper):
         description="Organization styles of objects",
     )
 
-    user_scale: bpy.props.FloatProperty(name="Scale", description="Set object scale", default=0.01, min=0.00001)
+    user_scale: bpy.props.FloatProperty(
+        name="Scale", description="Set object scale", default=0.01, min=0.00001
+    )
 
     lin_deflection: bpy.props.FloatProperty(
         name="Linear deflection",
@@ -815,7 +825,9 @@ class ImportStepCADOperator(bpy.types.Operator, ImportHelper):
         if result:
             return {"FINISHED"}
         else:
-            self.report({"ERROR"}, "STEP file could not be opened. Possibly damaged file.")
+            self.report(
+                {"ERROR"}, "STEP file could not be opened. Possibly damaged file."
+            )
             return {"CANCELLED"}
 
 
@@ -948,7 +960,9 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
         lin_def = context.scene.stepper.lin_deflection
         # merge_distance = context.scene.stepper.merge_distance
         if bpy.context.scene.stepper.simpler_parameters:
-            ang_def, lin_def = calculate_detail_level(bpy.context.scene.stepper.detail_level)
+            ang_def, lin_def = calculate_detail_level(
+                bpy.context.scene.stepper.detail_level
+            )
 
         # select all objs with the same meshes
         for obj in my_selection:
@@ -1125,7 +1139,10 @@ class STEP_AddonPreferences(bpy.types.AddonPreferences):
             box.label(text="STEPper: Python version check failure", icon="ERROR")
 
             row = box.row()
-            row.label(text="Current version: " + str(".".join(str(i) for i in sys.version_info[:2])))
+            row.label(
+                text="Current version: "
+                + str(".".join(str(i) for i in sys.version_info[:2]))
+            )
             row = box.row()
             row.label(text="Please install Blender with Python " + must_have_str)
             row = box.row()

@@ -115,7 +115,7 @@ def nurbs_parse(current_face):
     nurbs_converter.Perform(current_face)
     result_shape = nurbs_converter.Shape()
     _test_shape(result_shape)
-    brep_face = BRep_Tool.Surface(topods.Face(result_shape))
+    brep_face = BRep_Tool.Surface(TopoDS.Face(result_shape))
     occ_face = GeomConvert.SurfaceToBSplineSurface(brep_face)
     # _test_shape(occ_face)
 
@@ -816,7 +816,7 @@ class ReadSTEP:
                 return []
 
             while ex.More():
-                pt = nurbs_parse(topods.Face(ex.Current()))
+                pt = nurbs_parse(TopoDS.Face(ex.Current()))
                 nbs.append(pt)
                 ex.Next()
 

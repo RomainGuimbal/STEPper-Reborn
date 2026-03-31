@@ -25,13 +25,13 @@ STEP file. The structure is presented as an indented text outline."""
 
 # Modified 2024 Tommi Hyppänen same license
 
-from OCP.IFSelect import IFSelect_RetDone
-from OCP.STEPCAFControl import STEPCAFControl_Reader
-from OCP.TCollection import TCollection_ExtendedString
-from OCP.TDF import TDF_Label, TDF_LabelSequence
-from OCP.TDocStd import TDocStd_Document
-from OCP.XCAFApp import XCAFApp_Application_GetApplication
-from OCP.XCAFDoc import XCAFDoc_DocumentTool
+from OCC.Core.IFSelect import IFSelect_RetDone
+from OCC.Core.STEPCAFControl import STEPCAFControl_Reader
+from OCC.Core.TCollection import TCollection_ExtendedString
+from OCC.Core.TDF import TDF_Label, TDF_LabelSequence
+from OCC.Core.TDocStd import TDocStd_Document
+from OCC.Core.XCAFApp import XCAFApp_Application_GetApplication
+from OCC.Core.XCAFDoc import XCAFDoc_DocumentTool
 
 
 class StepAnalyzer:
@@ -91,7 +91,7 @@ class StepAnalyzer:
         # Find root label of step doc
         labels = TDF_LabelSequence()
         self.shape_tool.GetFreeShapes(labels)
-        print(f"Empty: {labels.IsEmpty_s()}")
+        print(f"Empty: {labels.IsEmpty()}")
         nbr = labels.Length()
         print("Analyzer roots:", nbr)
 
@@ -100,7 +100,7 @@ class StepAnalyzer:
         # Get information from root label
         name = rootlabel.GetLabelName()
         entry = rootlabel.EntryDumpToString()
-        is_assy = self.shape_tool.IsAssembly_s(rootlabel)
+        is_assy = self.shape_tool.IsAssembly(rootlabel)
         if is_assy:
             # If 1st label at root holds an assembly, it is the Top Assy.
             # Through this label, the entire assembly is accessible.
@@ -110,7 +110,7 @@ class StepAnalyzer:
             self.indent += 2
             top_comps = TDF_LabelSequence()  # Components of Top Assy
             subchilds = False
-            is_assy = self.shape_tool.GetComponents_s(rootlabel, top_comps, subchilds)
+            is_assy = self.shape_tool.GetComponents(rootlabel, top_comps, subchilds)
             self.output += f"Number of labels at root = {nbr}\n"
             if top_comps.Length():
                 self.find_components(top_comps)
@@ -129,7 +129,7 @@ class StepAnalyzer:
             c_name = c_label.GetLabelName()
             c_entry = c_label.EntryDumpToString()
             ref_label = TDF_Label()  # label of referred shape (or assembly)
-            is_ref = self.shape_tool.GetReferredShape_s(c_label, ref_label)
+            is_ref = self.shape_tool.GetReferredShape(c_label, ref_label)
             if is_ref:  # just in case all components are not references
                 ref_entry = ref_label.EntryDumpToString()
                 ref_name = ref_label.GetLabelName()
@@ -137,11 +137,11 @@ class StepAnalyzer:
                 self.output += f"{self.uid}{indent}[{c_entry}] {c_name}"
                 self.output += f" => [{ref_entry}] {ref_name}\n"
                 self.uid += 1
-                if self.shape_tool.IsAssembly_s(ref_label):
+                if self.shape_tool.IsAssembly(ref_label):
                     self.indent += 1
                     ref_comps = TDF_LabelSequence()  # Components of Assy
                     subchilds = False
-                    _ = self.shape_tool.GetComponents_s(ref_label, ref_comps, subchilds)
+                    _ = self.shape_tool.GetComponents(ref_label, ref_comps, subchilds)
                     if ref_comps.Length():
                         self.find_components(ref_comps)
 

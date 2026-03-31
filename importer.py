@@ -33,54 +33,60 @@ from . import trimesh
 from . import nurbs
 
 importlib.reload(trimesh)
-from OCP.BRep import BRep_Tool
-from OCP.BRepAdaptor import BRepAdaptor_Surface
-from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert, BRepBuilderAPI_Transform
-from OCP.BRepLProp import BRepLProp_SLProps
-from OCP.BRepMesh import BRepMesh_IncrementalMesh
-from OCP.BRepTools import BRepTools
-from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
-from OCP.GeomConvert import GeomConvert
-from OCP.GeomLProp import GeomLProp_SLProps
-from OCP.gp import gp, gp_Dir, gp_Pln, gp_Pnt, gp_Pnt2d, gp_Trsf, gp_Vec, gp_XYZ
+from OCC.Core.BRep import BRep_Tool
+from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
+from OCC.Core.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert, BRepBuilderAPI_Transform
+from OCC.Core.BRepLProp import BRepLProp_SLProps
+from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh
+from OCC.Core.BRepTools import breptools
+from OCC.Core.GeomAPI import GeomAPI_ProjectPointOnSurf
+from OCC.Core.GeomConvert import geomconvert_SurfaceToBSplineSurface
+from OCC.Core.GeomLProp import GeomLProp_SLProps
+from OCC.Core.gp import gp, gp_Dir, gp_Pln, gp_Pnt, gp_Pnt2d, gp_Trsf, gp_Vec, gp_XYZ
 
-# from OCP.Standard import Standard_Real
-from OCP.IFSelect import IFSelect_RetDone
-from OCP.IMeshTools import IMeshTools_Parameters
-from OCP.Interface import Interface_Static
-from OCP.Quantity import Quantity_Color, Quantity_TOC_RGB
-from OCP.STEPCAFControl import STEPCAFControl_Reader
-from OCP.STEPControl import STEPControl_Reader
+# from OCC.Core.Standard import Standard_Real
+from OCC.Core.IFSelect import IFSelect_RetDone
+from OCC.Core.IMeshTools import IMeshTools_Parameters
+from OCC.Core.Interface import Interface_Static_SetIVal
+from OCC.Core.Poly import poly
+from OCC.Core.Quantity import Quantity_Color, Quantity_TOC_RGB
+from OCC.Core.STEPCAFControl import STEPCAFControl_Reader
+from OCC.Core.STEPControl import STEPControl_Reader
 
-from OCP.TCollection import TCollection_ExtendedString
-from OCP.TColStd import TColStd_SequenceOfAsciiString
-from OCP.TDF import TDF_Label, TDF_LabelSequence
-from OCP.TDF import TDF_Tool
-from OCP.TDocStd import TDocStd_Document
-from OCP.TopAbs import (
+# from OCC.Core.TCollection import TCollection_ExtendedString
+from OCC.Core.TColStd import TColStd_SequenceOfAsciiString
+from OCC.Core.TDF import TDF_Label, TDF_LabelSequence
+from OCC.Core.TDocStd import TDocStd_Document
+from OCC.Core.TopAbs import (
     TopAbs_COMPOUND,
     TopAbs_EDGE,
     TopAbs_FACE,
     TopAbs_FORWARD,
+    TopAbs_INTERNAL,
     TopAbs_REVERSED,
     TopAbs_SHELL,
     TopAbs_SOLID,
     TopAbs_VERTEX,
     TopAbs_WIRE,
+    topabs_ShapeTypeToString,
 )
-from OCP.TopExp import TopExp_Explorer
-from OCP.TopLoc import TopLoc_Location
+from OCC.Core.TopExp import TopExp_Explorer
+from OCC.Core.TopLoc import TopLoc_Location
 
-# from OCP.TopExp import topexp_MapShapes
-# from OCP.TopTools import TopTools_MapOfShape, TopTools_IndexedMapOfShape
-from OCP.TopoDS import TopoDS_Shape, TopoDS
-from OCP.XCAFApp import XCAFApp_Application
-from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ColorGen, XCAFDoc_ColorSurf, XCAFDoc_ColorCurv
-from OCP.XSControl import XSControl_WorkSession
+# from OCC.Core.TopExp import topexp_MapShapes
+# from OCC.Core.TopTools import TopTools_MapOfShape, TopTools_IndexedMapOfShape
+from OCC.Core.TopoDS import TopoDS_Shape, topods
+from OCC.Core.XCAFApp import XCAFApp_Application_GetApplication
+from OCC.Core.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ColorGen, XCAFDoc_ColorSurf, XCAFDoc_ColorCurv
+from OCC.Core.XSControl import XSControl_WorkSession
+
+import OCC
+
+print("--> STEPper OpenCASCADE version:", OCC.VERSION)
 
 
 def b_colorname(col):
-    return Quantity_Color.StringName_s(Quantity_Color.Name(col))
+    return Quantity_Color.StringName(Quantity_Color.Name(col))
 
 
 def b_XYZ(v):
@@ -116,7 +122,7 @@ def nurbs_parse(current_face):
     result_shape = nurbs_converter.Shape()
     _test_shape(result_shape)
     brep_face = BRep_Tool.Surface(topods.Face(result_shape))
-    occ_face = GeomConvert.SurfaceToBSplineSurface(brep_face)
+    occ_face = geomconvert_SurfaceToBSplineSurface(brep_face)
     # _test_shape(occ_face)
 
     # extract the Control Points of each face
@@ -198,29 +204,6 @@ def equalize_2d_points(pts):
     return pts
 
 
-def get_label_name(label):
-    """Return the name of a TDF_Label as a string, fallback to EntryDumpToString or Tag if needed."""
-    try:
-        # Try to use GetLabelName if available
-        name = TCollection_ExtendedString()
-        if hasattr(TDF_Tool, "GetLabelName"):
-            tool = TDF_Tool()
-            tool.GetLabelName(label, name)
-            return name.ToExtString()
-        # Some OCP builds may have it as a static method
-        elif hasattr(label, "GetLabelName"):
-            return label.GetLabelName()
-    except Exception:
-        pass
-    # Fallback: use EntryDumpToString or Tag
-    if hasattr(label, "EntryDumpToString"):
-        return label.EntryDumpToString()
-    elif hasattr(label, "Tag"):
-        return str(label.Tag())
-    else:
-        return str(label)
-
-
 @dataclass
 class ShapeTreeNode:
     """
@@ -288,7 +271,7 @@ class ShapeTree:
 
     def add(self, parent, label) -> ShapeTreeNode:
         loc = len(self.nodes)
-        node = ShapeTreeNode(parent, loc, label.Tag(), get_label_name(label))
+        node = ShapeTreeNode(parent, loc, label.Tag(), label.GetLabelName())
         self.nodes[parent].children.append(loc)
         self.nodes.append(node)
         return self.nodes[-1]
@@ -312,11 +295,9 @@ class ReadSTEP:
         colorset = False
         colortype = None
 
-        shape = self.shape_tool.GetShape_s(label)
-
-        c_gen = self.color_tool.GetColor(shape, XCAFDoc_ColorGen, c)
-        c_surf = self.color_tool.GetColor(shape, XCAFDoc_ColorSurf, c)
-        c_curv = self.color_tool.GetColor(shape, XCAFDoc_ColorCurv, c)
+        c_gen = self.color_tool.GetColor(label, XCAFDoc_ColorGen, c)
+        c_surf = self.color_tool.GetColor(label, XCAFDoc_ColorSurf, c)
+        c_curv = self.color_tool.GetColor(label, XCAFDoc_ColorCurv, c)
         if c_gen or c_surf or c_curv:
             colorset = True
             colortype = c_gen * 1 + c_surf * 2 + c_curv * 3
@@ -333,7 +314,7 @@ class ReadSTEP:
                 print(b_colorname(tcol))
 
     def label_matrix(self, lab):
-        trsf = self.shape_tool.GetLocation_s(lab).Transformation()
+        trsf = self.shape_tool.GetLocation(lab).Transformation()
         matrix = np.eye(4, dtype=np.float32)
         for row in range(1, 4):
             for col in range(1, 5):
@@ -367,12 +348,12 @@ class ReadSTEP:
         st = self.shape_tool
         lab = self.shape_label[shp]
         vals = (
-            st.IsAssembly_s(lab),
-            st.IsFree_s(lab),
-            st.IsShape_s(lab),
-            st.IsCompound_s(lab),
-            st.IsComponent_s(lab),
-            st.IsSimpleShape_s(lab),
+            st.IsAssembly(lab),
+            st.IsFree(lab),
+            st.IsShape(lab),
+            st.IsCompound(lab),
+            st.IsComponent(lab),
+            st.IsSimpleShape(lab),
             shp.Locked(),
         )
 
@@ -389,7 +370,7 @@ class ReadSTEP:
         print("Init transfer with units")
 
         # Init new doc and reader
-        doc = TDocStd_Document(TCollection_ExtendedString("STEP"))
+        doc = TDocStd_Document("STEP")
         step_reader = STEPCAFControl_Reader()
         step_reader.SetColorMode(True)
         step_reader.SetNameMode(True)
@@ -410,7 +391,7 @@ class ReadSTEP:
 
         # https://dev.opencascade.org/content/loading-step-file-crashes-edgeloop
         # Default is 1, try also 0
-        # Interface_Static.SetVal("read.surfacecurve.mode", 3)
+        # Interface_Static_SetIVal("read.surfacecurve.mode", 3)
 
         # read units
         ulen_names = TColStd_SequenceOfAsciiString()
@@ -481,8 +462,8 @@ class ReadSTEP:
         print("Init simple transfer")
 
         # Create the application, empty document and shape_tool
-        doc = TDocStd_Document(TCollection_ExtendedString("STEP"))
-        app = XCAFApp_Application.GetApplication()
+        doc = TDocStd_Document("STEP")
+        app = XCAFApp_Application_GetApplication()
         app.NewDocument("MDTV-XCAF", doc)
 
         # Read file and return populated doc
@@ -508,8 +489,8 @@ class ReadSTEP:
         self.transfer_with_units(self.filename)
         # self.transfer_simple(self.filename)
 
-        self.shape_tool = XCAFDoc_DocumentTool.ShapeTool_s(self.doc.Main())
-        self.color_tool = XCAFDoc_DocumentTool.ColorTool_s(self.doc.Main())
+        self.shape_tool = XCAFDoc_DocumentTool.ShapeTool(self.doc.Main())
+        self.color_tool = XCAFDoc_DocumentTool.ColorTool(self.doc.Main())
 
         # material_tool = XCAFDoc_DocumentTool_MaterialTool(doc.Main())
         # layer_tool = XCAFDoc_DocumentTool_LayerTool(doc.Main())
@@ -549,8 +530,8 @@ class ReadSTEP:
             # print(" " * (2 * level) + lab.GetLabelName())
             master_leaf = tree.nodes[leaf_id]
             # l_comps = TDF_LabelSequence()
-            # self.shape_tool.GetComponents_s(lab, l_comps)
-            if self.shape_tool.IsAssembly_s(lab):
+            # self.shape_tool.GetComponents(lab, l_comps)
+            if self.shape_tool.IsAssembly(lab):
                 # Get transform for pure transform (empty)
                 # Empty has eye transform, inherit global from parent
 
@@ -559,12 +540,12 @@ class ReadSTEP:
 
                 # Read contained shapes
                 l_c = TDF_LabelSequence()
-                self.shape_tool.GetComponents_s(lab, l_c)
+                self.shape_tool.GetComponents(lab, l_c)
                 for i in range(l_c.Length()):
                     label = l_c.Value(i + 1)
-                    if self.shape_tool.IsReference_s(label):
+                    if self.shape_tool.IsReference(label):
                         label_reference = TDF_Label()
-                        self.shape_tool.GetReferredShape_s(label, label_reference)
+                        self.shape_tool.GetReferredShape(label, label_reference)
 
                         label_transform = self.label_matrix(label)
                         node = tree.add(master_leaf.index, label_reference)
@@ -577,9 +558,9 @@ class ReadSTEP:
                         # TODO: process rest of the data
                         pass
 
-            elif self.shape_tool.IsSimpleShape_s(lab):
+            elif self.shape_tool.IsSimpleShape(lab):
                 # TODO: self.shape_label stops being unique when shapes aren't transformed
-                shape = self.shape_tool.GetShape_s(lab)
+                shape = self.shape_tool.GetShape(lab)
                 master_leaf.set_shape(shape)
                 if shape in self.shape_label:
                     # Shape already in
@@ -590,11 +571,11 @@ class ReadSTEP:
                 self.face_color_priority[shape] = _cprio(lab, shape)
 
                 l_subss = TDF_LabelSequence()
-                self.shape_tool.GetSubShapes_s(lab, l_subss)
+                self.shape_tool.GetSubShapes(lab, l_subss)
                 self.sub_shapes[shape] = []
                 for i in range(l_subss.Length()):
                     lab_subs = l_subss.Value(i + 1)
-                    shape_sub = self.shape_tool.GetShape_s(lab_subs)
+                    shape_sub = self.shape_tool.GetShape(lab_subs)
                     self.shape_label[shape_sub] = lab_subs
                     self.sub_shapes[shape].append(shape_sub)
                     self.face_color_priority[shape_sub] = _cprio(lab_subs, shape_sub)
@@ -624,15 +605,18 @@ class ReadSTEP:
     def triangulate_face(self, face, tform):
         bt = BRep_Tool()
         location = TopLoc_Location()
-        facing = bt.Triangulation_s(face, location)
+        facing = bt.Triangulation(face, location)
         if facing is None:
             # Mesh error, no triangulation found for part
             self.import_problems["Triangulation"] += 1
             return None
 
+        normcalc = poly()
+        normcalc.ComputeNormals(facing)
+
         # nsurf = bt.Surface(face)
         surface = BRepAdaptor_Surface(face)
-        prop = BRepLProp_SLProps(surface, 2, gp.Resolution_s())
+        prop = BRepLProp_SLProps(surface, 2, gp.Resolution())
         # prop = BRepLProp_SLProps(surface, 2, 1e-4)
         # face_uv = facing.UVNode()
 
@@ -689,7 +673,7 @@ class ReadSTEP:
             # pt = gp_Pnt(loc[0], loc[1], loc[2])
             # pt_surf = GeomAPI_ProjectPointOnSurf(pt, nsurf)
             # fU, fV = pt_surf.Parameters(1)
-            # prop = GeomLProp_SLProps(nsurf, fU, fV, 2, gp.Resolution_s())
+            # prop = GeomLProp_SLProps(nsurf, fU, fV, 2, gp.Resolution())
 
             uv = facing.UVNode(t)
             u, v = uv.X(), uv.Y()
@@ -714,7 +698,7 @@ class ReadSTEP:
         # Build triangulation
         d_nbtriangles = facing.NbTriangles()
         for t in range(1, d_nbtriangles + 1):
-            T1, T2, T3 = tri(t).Get()
+            T1, T2, T3 = tri.Value(t).Get()
 
             if face.Orientation() != TopAbs_FORWARD:
                 T1, T2 = T2, T1
@@ -754,6 +738,8 @@ class ReadSTEP:
         iter_shapes = [shape] + self.sub_shapes[shape]
         iter_shapes.sort(key=lambda x: x.Checked())
 
+        brt = breptools()
+
         face_data = OrderedDict()
         batch = 0
 
@@ -767,7 +753,7 @@ class ReadSTEP:
                 col_name = ""
 
             # Clean all previous triangulations
-            BRepTools.Clean_s(shp)
+            brt.Clean(shp)
 
             # Subshape transforms can be different from the mainshape transform
             ex = TopExp_Explorer(shp, TopAbs_FACE)
@@ -781,7 +767,7 @@ class ReadSTEP:
             # Iterate through faces with TopExp_Explorer
             while ex.More():
                 exc = ex.Current()
-                face = TopoDS.Face_s(exc)
+                face = topods.Face(exc)
 
                 mesh = self.triangulate_face(face, trf)
                 if mesh:

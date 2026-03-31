@@ -75,7 +75,12 @@ from OCP.TopLoc import TopLoc_Location
 # from OCP.TopTools import TopTools_MapOfShape, TopTools_IndexedMapOfShape
 from OCP.TopoDS import TopoDS_Shape, TopoDS
 from OCP.XCAFApp import XCAFApp_Application
-from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ColorGen, XCAFDoc_ColorSurf, XCAFDoc_ColorCurv
+from OCP.XCAFDoc import (
+    XCAFDoc_DocumentTool,
+    XCAFDoc_ColorGen,
+    XCAFDoc_ColorSurf,
+    XCAFDoc_ColorCurv,
+)
 from OCP.XSControl import XSControl_WorkSession
 
 
@@ -381,7 +386,9 @@ class ReadSTEP:
 
         # res += f", C:{shp.NbChildren()}"
 
-        res += ", C:{} So:{} Sh:{} F:{} Wi:{} E:{} V:{}".format(*self.explore_shape(shp))
+        res += ", C:{} So:{} Sh:{} F:{} Wi:{} E:{} V:{}".format(
+            *self.explore_shape(shp)
+        )
 
         return " " + res + " "
 
@@ -523,7 +530,11 @@ class ReadSTEP:
         self.face_color_priority = {}
         self.tag_info = {}
         self.skipped_shapes = set([])
-        self.import_problems = {"Triangulation": 0, "Undefined normals": 0, "Empty shape": 0}
+        self.import_problems = {
+            "Triangulation": 0,
+            "Undefined normals": 0,
+            "Empty shape": 0,
+        }
 
     def read_file(self, filename):
         """Returns list of tuples (topods_shape, label, color)
@@ -570,7 +581,9 @@ class ReadSTEP:
                         node = tree.add(master_leaf.index, label_reference)
                         new_leaf = tree.nodes[node.index]
                         new_leaf.local_transform = label_transform
-                        new_leaf.global_transform = master_leaf.global_transform @ label_transform
+                        new_leaf.global_transform = (
+                            master_leaf.global_transform @ label_transform
+                        )
 
                         _get_sub_shapes(label_reference, level + 1, tree, node.index)
                     else:
@@ -610,7 +623,9 @@ class ReadSTEP:
 
             tree = ShapeTree()
             for i in range(labels.Length()):
-                print("DataExchange: Reading shape ({}/{})".format(i + 1, labels.Length()))
+                print(
+                    "DataExchange: Reading shape ({}/{})".format(i + 1, labels.Length())
+                )
 
                 root_item = labels.Value(i + 1)
                 node = tree.add(tree.get_root_id(), root_item)
@@ -696,7 +711,9 @@ class ReadSTEP:
             uvs.append((u, v))
 
             # The edges of UV give invalid normals, hence this
-            prop.SetParameters((u - Ucenter) * 0.999 + Ucenter, (v - Vcenter) * 0.999 + Vcenter)
+            prop.SetParameters(
+                (u - Ucenter) * 0.999 + Ucenter, (v - Vcenter) * 0.999 + Vcenter
+            )
 
             if prop.IsNormalDefined():
                 normal = prop.Normal().Transformed(itform)
@@ -738,7 +755,17 @@ class ReadSTEP:
 
         tri_data = []
         for ti, t in enumerate(tris):
-            tri_data.append(trimesh.TriData(t, [norms[i] for i in t], [uvs[i] for i in t], None, None, None, None))
+            tri_data.append(
+                trimesh.TriData(
+                    t,
+                    [norms[i] for i in t],
+                    [uvs[i] for i in t],
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+            )
 
         return trimesh.TriMesh(verts=verts, tris=tri_data)
 
@@ -809,7 +836,7 @@ class ReadSTEP:
     def build_nurbs(self, shape):
         iter_shapes = [shape]
         nbs = []
-        for shp_i, shp in enumerate(iter_shapes):
+        for _, shp in enumerate(iter_shapes):
             ex = TopExp_Explorer(shp, TopAbs_FACE)
             if not ex.More():
                 self.import_problems["Empty shape"] += 1

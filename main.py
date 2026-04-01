@@ -27,16 +27,12 @@ from bpy_extras.io_utils import ImportHelper
 
 from .trimesh import TriMesh
 
-# import sys
-# import math
-
 # from collections import defaultdict
 
 # from .sizeof import total_size
 # utils.memorytrace_start()
 
 global_file_cache = {}
-must_have_python = (3, 11)
 
 
 def scalemat(mat, sl):
@@ -1127,27 +1123,10 @@ class STEP_PT_STEPper_Debug(bpy.types.Panel):
 
 
 class STEP_AddonPreferences(bpy.types.AddonPreferences):
-    bl_idname = "STEPper"
+    bl_idname = __package__
 
     def draw(self, context):
         layout = self.layout
-
-        must_have_str = ".".join(str(i) for i in must_have_python)
-        if sys.version_info[:2] != must_have_python:
-            box = layout.box().column(align=True)
-            box.alert = True
-            box.label(text="STEPper: Python version check failure", icon="ERROR")
-
-            row = box.row()
-            row.label(
-                text="Current version: "
-                + str(".".join(str(i) for i in sys.version_info[:2]))
-            )
-            row = box.row()
-            row.label(text="Please install Blender with Python " + must_have_str)
-            row = box.row()
-            row.label(text="https://www.blender.org/")
-            return
 
         row = layout.row()
         row.prop(bpy.context.scene.stepper, "build_materials")
@@ -1197,3 +1176,6 @@ def unregister():
         bpy.utils.unregister_class(c)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     del bpy.types.Scene.stepper
+
+if __package__ == "__main__":
+    register()

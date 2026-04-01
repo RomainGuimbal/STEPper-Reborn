@@ -13,16 +13,9 @@
 #
 # Copyright 2021 Tommi Hyppänen
 
-import sys
-from os.path import dirname
-
-file_dirname = dirname(__file__)
-if file_dirname not in sys.path:
-    sys.path.append(file_dirname)
 
 import importlib
 import os
-import random
 from collections import defaultdict, OrderedDict
 from dataclasses import dataclass, field
 
@@ -39,15 +32,15 @@ from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert, BRepBuilderAPI_Trans
 from OCP.BRepLProp import BRepLProp_SLProps
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.BRepTools import BRepTools
-from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
+# from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
 from OCP.GeomConvert import GeomConvert
-from OCP.GeomLProp import GeomLProp_SLProps
-from OCP.gp import gp, gp_Dir, gp_Pln, gp_Pnt, gp_Pnt2d, gp_Trsf, gp_Vec, gp_XYZ
+# from OCP.GeomLProp import GeomLProp_SLProps
+from OCP.gp import gp #, gp_Dir, gp_Pln, gp_Pnt, gp_Pnt2d, gp_Trsf, gp_Vec, gp_XYZ
 
 # from OCP.Standard import Standard_Real
 from OCP.IFSelect import IFSelect_RetDone
-from OCP.IMeshTools import IMeshTools_Parameters
-from OCP.Interface import Interface_Static
+# from OCP.IMeshTools import IMeshTools_Parameters
+# from OCP.Interface import Interface_Static
 from OCP.Quantity import Quantity_Color, Quantity_TOC_RGB
 from OCP.STEPCAFControl import STEPCAFControl_Reader
 from OCP.STEPControl import STEPControl_Reader

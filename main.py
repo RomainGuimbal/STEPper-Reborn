@@ -17,7 +17,6 @@
 import ntpath
 import os
 import time
-import sys
 
 import numpy as np
 import bmesh
@@ -291,11 +290,25 @@ def transform_to_up(up, chosen_objects, scale, to_cursor=True):
     # for obj in created_objs:
     #     obj.select_set(True)
 
+from OCP.AIS import AIS_Shape
+def shape_size(shp):
+    bb = AIS_Shape(shp).BoundingBox()
+    if bb.IsVoid():
+        return 1.0
+    diag = (bb.CornerMax().Distance(bb.CornerMin()))/100000
+    return diag
+
 
 def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
     hacks = set([])
     if bpy.context.scene.stepper.hack_skip_zero_solids:
         hacks.add("skip_solids")
+
+    adaptative = False #TODO
+    if adaptative :
+        size = shape_size(shp)
+        lind *= size
+        angd *= size
 
     mesh: TriMesh = step_reader.build_trimesh(
         shp, lin_def=lind, ang_def=angd, hacks=hacks

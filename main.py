@@ -638,7 +638,7 @@ class PG_Stepper(bpy.types.PropertyGroup):
     simpler_parameters: bpy.props.BoolProperty(
         name="Artist friendly parameters",
         description="Instead of linear and angle deflection values, use only detail setting",
-        default=True,
+        default=False,
     )
 
     detail_level: bpy.props.IntProperty(
@@ -648,20 +648,21 @@ class PG_Stepper(bpy.types.PropertyGroup):
         min=1,
     )
 
+    # In blender unit. Must be multiplied by 2000 to match OCC deflection length.
     lin_deflection: bpy.props.FloatProperty(
         name="Linear deflection",
-        description="Smaller values increase polygon count. Higher values lower polygon count.",
-        default=0.8,
-        min=0.002,
-        # max=2.0,
+        description="Max distance between the mesh and the theoretical shape",
+        default=0.001,#1mm
+        min=0.00001,#0.01mm
+        unit="LENGTH",
     )
 
     ang_deflection: bpy.props.FloatProperty(
         name="Angular deflection",
-        description="Smaller values increase polygon count. Higher values lower polygon count.",
+        description="Smaller values increase polygon count. Higher values lower polygon count",
         default=0.5,
         min=0.002,
-        # max=2.0,
+        unit="ROTATION",
     )
 
     fix_ascii_file: bpy.props.StringProperty(
@@ -734,20 +735,22 @@ class ImportStepCADOperator(bpy.types.Operator, ImportHelper):
         name="Scale", description="Set object scale", default=0.01, min=0.00001
     )
 
+    # In blender unit. Must be multiplied by 2000 to match OCC deflection length.
     lin_deflection: bpy.props.FloatProperty(
         name="Linear deflection",
-        description="Smaller values increase polygon count. Higher values lower polygon count.",
-        default=0.8,
-        min=0.002,
-        max=2.0,
+        description="Max distance between the mesh and the theoretical shape",
+        default=0.001,#1mm
+        min=0.00001,#0.01mm
+        unit="LENGTH",
     )
 
     ang_deflection: bpy.props.FloatProperty(
         name="Angular deflection",
-        description="Smaller values increase polygon count. Higher values lower polygon count.",
+        description="Smaller values increase polygon count. Higher values lower polygon count",
         default=0.5,
         min=0.002,
         max=2.0,
+        unit="ROTATION",
     )
 
     detail_level: bpy.props.IntProperty(
@@ -813,7 +816,7 @@ class ImportStepCADOperator(bpy.types.Operator, ImportHelper):
 
         # print(type(self.files))
         # print(dir(self.files))
-        l_def, a_def = self.lin_deflection, self.ang_deflection
+        l_def, a_def = self.lin_deflection*2000, self.ang_deflection
         if bpy.context.scene.stepper.simpler_parameters:
             a_def, l_def = calculate_detail_level(self.detail_level)
 
@@ -970,8 +973,8 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
         rebuilt_meshes = set()
         my_selection = list(context.selected_objects)
 
+        lin_def = context.scene.stepper.lin_deflection*2000
         ang_def = context.scene.stepper.ang_deflection
-        lin_def = context.scene.stepper.lin_deflection
         # merge_distance = context.scene.stepper.merge_distance
         if bpy.context.scene.stepper.simpler_parameters:
             ang_def, lin_def = calculate_detail_level(

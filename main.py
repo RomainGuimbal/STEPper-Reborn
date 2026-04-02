@@ -304,11 +304,10 @@ def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
     if bpy.context.scene.stepper.hack_skip_zero_solids:
         hacks.add("skip_solids")
 
-    adaptative = False #TODO
-    if adaptative :
-        size = shape_size(shp)
-        lind *= size
-        angd *= size
+    # adaptative = bpy.context.scene.stepper.use_adaptive_resolution
+    # if adaptative :
+    #     size = shape_size(shp)
+    #     angd *= size
 
     mesh: TriMesh = step_reader.build_trimesh(
         shp, lin_def=lind, ang_def=angd, hacks=hacks
@@ -671,6 +670,12 @@ class PG_Stepper(bpy.types.PropertyGroup):
         default="",
         maxlen=1024,
         subtype="FILE_PATH",
+    )
+
+    use_adaptive_resolution: bpy.props.BoolProperty(
+        name="Adaptive resolution",
+        description="Automatically adjust deflection values based on shape size",
+        default=True,
     )
 
 

@@ -33,6 +33,7 @@ from OCP.TDocStd import TDocStd_Document
 from OCP.XCAFApp import XCAFApp_Application_GetApplication
 from OCP.XCAFDoc import XCAFDoc_DocumentTool
 
+from .importer import get_label_name
 
 class StepAnalyzer:
     """A class that analyzes the structure of an OCAF document."""
@@ -98,7 +99,7 @@ class StepAnalyzer:
         rootlabel = labels.Value(1)  # First label at root
 
         # Get information from root label
-        name = rootlabel.GetLabelName()
+        name = get_label_name(rootlabel)
         entry = rootlabel.EntryDumpToString()
         is_assy = self.shape_tool.IsAssembly_s(rootlabel)
         if is_assy:
@@ -126,13 +127,13 @@ class StepAnalyzer:
         """
         for j in range(comps.Length()):
             c_label = comps.Value(j + 1)  # component label <class 'TDF_Label'>
-            c_name = c_label.GetLabelName()
+            c_name = get_label_name(c_label)
             c_entry = c_label.EntryDumpToString()
             ref_label = TDF_Label()  # label of referred shape (or assembly)
             is_ref = self.shape_tool.GetReferredShape_s(c_label, ref_label)
             if is_ref:  # just in case all components are not references
                 ref_entry = ref_label.EntryDumpToString()
-                ref_name = ref_label.GetLabelName()
+                ref_name = get_label_name(ref_label)
                 indent = "  " * self.indent
                 self.output += f"{self.uid}{indent}[{c_entry}] {c_name}"
                 self.output += f" => [{ref_entry}] {ref_name}\n"

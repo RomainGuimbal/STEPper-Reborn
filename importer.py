@@ -199,7 +199,7 @@ def equalize_2d_points(pts):
 def get_label_name(label):
     """Return the name of a TDF_Label as a string, fallback to EntryDumpToString or Tag if needed.""" 
     
-    # Try to use GetLabelName if available
+    # Try to use name label if available
     name_attr = TDataStd_Name()
     if label.FindAttribute(TDataStd_Name.GetID_s(), name_attr):
         return name_attr.Get().ToExtString()
@@ -544,7 +544,7 @@ class ReadSTEP:
 
         def _get_sub_shapes(lab, level, tree, leaf_id):
 
-            # print(" " * (2 * level) + lab.GetLabelName())
+            # print(" " * (2 * level) + get_label_name(lab))
             master_leaf = tree.nodes[leaf_id]
             # l_comps = TDF_LabelSequence()
             # self.shape_tool.GetComponents_s(lab, l_comps)
@@ -762,7 +762,7 @@ class ReadSTEP:
 
         # TODO: this is hack
         if "skip_solids" in hacks and self.explore_partial(shape, TopAbs_SOLID) == 0:
-            self.skipped_shapes.add(self.shape_label[shape].GetLabelName())
+            self.skipped_shapes.add(get_label_name(self.shape_label[shape]))
             return out_mesh
 
         iter_shapes = [shape] + self.sub_shapes[shape]
@@ -772,7 +772,7 @@ class ReadSTEP:
         batch = 0
 
         # Iterate over the main shape and its sub shapes
-        for shp_i, shp in enumerate(iter_shapes):
+        for _, shp in enumerate(iter_shapes):
             col = self.face_colors[shp]
             if col is not None:
                 col_rgb = b_RGB(col)
@@ -811,8 +811,8 @@ class ReadSTEP:
                 ex.Next()
                 batch += 1
 
-        for fc, b in face_data.items():
-            prio, mesh, col_name = b
+        for _, b in face_data.items():
+            _, mesh, col_name = b
             if len(mesh.verts) > 0:
                 out_mesh.add_mesh(mesh)
 

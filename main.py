@@ -14,11 +14,14 @@
 # Created Date: Thursday, April 15th 2021, 4:38:48 pm
 # Copyright: Tommi Hyppänen
 
+from ast import operator
+from ast import operator
 import ntpath
 import os
 import time
 
 import numpy as np
+import math
 import bmesh
 import bpy
 from bpy.props import StringProperty
@@ -290,12 +293,15 @@ def transform_to_up(up, chosen_objects, scale, to_cursor=True):
     # for obj in created_objs:
     #     obj.select_set(True)
 
+
 from OCP.AIS import AIS_Shape
+
+
 def shape_size(shp):
     bb = AIS_Shape(shp).BoundingBox()
     if bb.IsVoid():
         return 1.0
-    diag = (bb.CornerMax().Distance(bb.CornerMin()))/100000
+    diag = (bb.CornerMax().Distance(bb.CornerMin())) / 100000
     return diag
 
 
@@ -624,45 +630,50 @@ def load_step(
 
 class PG_Stepper(bpy.types.PropertyGroup):
     build_materials: bpy.props.BoolProperty(
-        name="Build materials",
+        name="Build Materials",
         description="Build materials from STEP file colors",
         default=True,
     )
 
     hack_skip_zero_solids: bpy.props.BoolProperty(
-        name="Skip faulty solids",
+        name="Skip Faulty Solids",
         description="Skip some shapes the library hangs on and fails to load",
         default=False,
     )
 
     simpler_parameters: bpy.props.BoolProperty(
-        name="Artist friendly parameters",
+        name="Artist Friendly Parameters",
         description="Instead of linear and angle deflection values, use only detail setting",
         default=False,
     )
 
     detail_level: bpy.props.IntProperty(
-        name="Mesh detail",
+        name="Mesh Detail",
         description="How detailed you want the mesh to be",
         default=100,
         min=1,
     )
 
-    # In blender unit. Must be multiplied by 2000 to match OCC deflection length.
+    # In meter. Must be multiplied by 2000 to match OCC deflection length.
     lin_deflection: bpy.props.FloatProperty(
-        name="Linear deflection",
-        description="Max distance between the mesh and the theoretical shape",
-        default=0.001,#1mm
-        min=0.00001,#0.01mm
+        name="Linear Deflection",
+        description="Max distance between the mesh and the theoretical shape. Smaller values increase polygon count",
+        default=0.001,  # 1mm
+        min=0.00001,  # 0.01mm
         unit="LENGTH",
+        step=0.01,
     )
 
+    # In radian. Must be multiplied by 2 to match OCC deflection angle.
     ang_deflection: bpy.props.FloatProperty(
-        name="Angular deflection",
-        description="Smaller values increase polygon count. Higher values lower polygon count",
-        default=0.5,
-        min=0.002,
+        name="Angular Deflection",
+        description="Max angle between the tangent plane and the surrounding mesh of samples. Smaller values increase polygon count",
+        default=0.0872664,  # 5°
+        soft_min=0.00174532925,  # 0.1°
+        min=0.000001745,  # 0.0001°
+        max=math.pi,
         unit="ROTATION",
+        step=100,  # 1°
     )
 
     fix_ascii_file: bpy.props.StringProperty(
@@ -680,8 +691,8 @@ class PG_Stepper(bpy.types.PropertyGroup):
     )
 
 
-class ImportStepCADOperator(bpy.types.Operator, ImportHelper):
-    bl_idname = "import_scene.occ_import_step"
+class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
+    bl_idname = "object.occ_import_step"
     bl_label = "Import STEP"
     bl_description = "Import a STEP file"
     bl_options = {"PRESET"}
@@ -714,7 +725,7 @@ class ImportStepCADOperator(bpy.types.Operator, ImportHelper):
             ("ZPOS", "Z", "", 4),
             # ("ZNEG", "Z-", "", 5),
         ],
-        name="Up",
+        name="Up Axis",
         default="YPOS",
         description="Up axis of the imported model",
     )
@@ -735,88 +746,93 @@ class ImportStepCADOperator(bpy.types.Operator, ImportHelper):
         name="Scale", description="Set object scale", default=0.01, min=0.00001
     )
 
-    # In blender unit. Must be multiplied by 2000 to match OCC deflection length.
+    # In meter. Must be multiplied by 2000 to match OCC deflection length.
     lin_deflection: bpy.props.FloatProperty(
-        name="Linear deflection",
-        description="Max distance between the mesh and the theoretical shape",
-        default=0.001,#1mm
-        min=0.00001,#0.01mm
+        name="Linear Deflection",
+        description="Max distance between the mesh and the theoretical shape. Smaller values increase polygon count",
+        default=0.001,  # 1mm
+        min=0.00001,  # 0.01mm
         unit="LENGTH",
+        step=0.01,
     )
 
     ang_deflection: bpy.props.FloatProperty(
-        name="Angular deflection",
-        description="Smaller values increase polygon count. Higher values lower polygon count",
-        default=0.5,
-        min=0.002,
-        max=2.0,
+        name="Angular Deflection",
+        description="Max angle between the tangent plane and the surrounding mesh of samples. Smaller values increase polygon count",
+        default=0.0872664,  # 5°
+        soft_min=0.00174532925,  # 0.1°
+        min=0.000001745,  # 0.0001°
+        max=math.pi,
         unit="ROTATION",
+        step=100,  # 1°
+        # set_transform=convert()
     )
 
     detail_level: bpy.props.IntProperty(
-        name="Mesh detail",
+        name="Mesh Detail",
         description="How detailed you want the mesh to be",
         default=100,
         min=1,
     )
 
     custom_scale: bpy.props.BoolProperty(
-        name="Custom scale",
+        name="Custom Scale",
         description="Instead of loading the unit information from the file, determine it manually",
         default=False,
     )
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+        # row = layout.row(align=True)
 
-        def spacer(inpl):
-            row = inpl.row()
-            row.ui_units_y = 0.5
-            row.label(text="")
-            return row
+        header, body = layout.panel("Resolution", default_closed=False)
+        header.label(text="General")
+        if body:
+            # Custom scale
+            col = body.column(align=False, heading="Overwrite Scale")
+            row = col.row(align=True)
+            sub = row.row(align=True)
+            sub.prop(self, "custom_scale", text="")
+            sub = sub.row(align=True)
+            sub.active = self.custom_scale
+            sub.prop(self, "user_scale", text="")
 
-        row = layout.row()
+            # Orientation
+            row = body.row()
+            row.prop(self, "up_as")
 
-        row.label(text="STEPper import options:")
+            # Hierarchy
+            row = body.row()
+            row.prop(self, "hierarchy_types", text="Hierarchy")
 
-        col = layout.box()
-        col = col.column(align=True)
+        header, body = layout.panel("Resolution", default_closed=False)
+        header.label(text="Resolution")
+        if body:
+            # row = col.row()
+            # row.prop(self, "merge_distance")
 
-        row = col.row()
-        row.prop(self, "custom_scale")
-        if self.custom_scale:
-            row = col.row()
-            row.prop(self, "user_scale")
+            if bpy.context.scene.stepper.simpler_parameters:
+                row = body.row()
+                row.prop(self, "detail_level")
 
-        # row = col.row()
-        # row.prop(self, "merge_distance")
+            else:
+                row = body.row()
+                row.prop(self, "lin_deflection")
 
-        if bpy.context.scene.stepper.simpler_parameters:
-            row = col.row()
-            row.prop(self, "detail_level")
+                row = body.row()
+                row.prop(self, "ang_deflection")
 
-        else:
-            row = col.row()
-            row.prop(self, "lin_deflection")
-
-            row = col.row()
-            row.prop(self, "ang_deflection")
-
-        # row = col.row()
-        # row.prop(prg, "fw_as")
-
-        row = col.row()
-        row.prop(self, "up_as")
-
-        row = col.row()
-        row.prop(self, "hierarchy_types", text="Hierarchy")
+            # row = col.row()
+            # row.prop(prg, "fw_as")
 
     def execute(self, context):
         folder = os.path.dirname(self.filepath)
 
         # print(type(self.files))
         # print(dir(self.files))
-        l_def, a_def = self.lin_deflection*2000, self.ang_deflection
+        l_def, a_def = self.lin_deflection * 2000, self.ang_deflection
         if bpy.context.scene.stepper.simpler_parameters:
             a_def, l_def = calculate_detail_level(self.detail_level)
 
@@ -971,9 +987,9 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
         curname = ""
         build_tags = set()
         rebuilt_meshes = set()
-        my_selection = list(context.selected_objects)
+        selected_objects = list(context.selected_objects)
 
-        lin_def = context.scene.stepper.lin_deflection*2000
+        lin_def = context.scene.stepper.lin_deflection * 2000
         ang_def = context.scene.stepper.ang_deflection
         # merge_distance = context.scene.stepper.merge_distance
         if bpy.context.scene.stepper.simpler_parameters:
@@ -982,15 +998,22 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
             )
 
         # select all objs with the same meshes
-        for obj in my_selection:
+        for obj in selected_objects:
             for other_obj in context.scene.objects:
                 if obj.data == other_obj.data:
                     other_obj.select_set(True)
 
+        # Reload files if not in cache
+        reload_needed = False
+        for o in selected_objects:
+            if o["STEP_file"] not in global_file_cache:
+                bpy.ops.object.occ_reload_step()
+                break
+
         # go through all selected and rebuild the meshes
         wm = bpy.context.window_manager
-        wm.progress_begin(0, len(my_selection))
-        for progress_count, obj in enumerate(my_selection):
+        wm.progress_begin(0, len(selected_objects))
+        for progress_count, obj in enumerate(selected_objects):
             if obj.data.name not in meshes:
                 meshes[obj.data.name] = obj.data
                 sel_tag = obj["STEP_tag"]
@@ -1003,17 +1026,9 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
                 continue
 
             if prevname != curname:
-                if curname in global_file_cache:
-                    step_reader = global_file_cache[curname]
-                    # shapes_labels = step_reader.output_shapes
-                    tree = step_reader.tree
-                else:
-                    self.report(
-                        {"ERROR"},
-                        'STEP loader: Object "{}" not found in cache for file {}. '
-                        "Please reload STEP file".format(obj.name, curname),
-                    )
-                    break
+                step_reader = global_file_cache[curname]
+                # shapes_labels = step_reader.output_shapes
+                tree = step_reader.tree
 
             for shp, node_index in tree.get_shapes():
                 _, _, tag, name, _, _, _ = tree.nodes[node_index].get_values()
@@ -1045,12 +1060,6 @@ class STEP_PT_STEPper(bpy.types.Panel):
         prg = context.scene.stepper
 
         layout = self.layout
-
-        # def spacer(inpl):
-        #     row = inpl.row()
-        #     row.ui_units_y = 0.5
-        #     row.label(text="")
-        #     return row
 
         row = layout.row()
         col = row.column(align=True)
@@ -1167,12 +1176,14 @@ class STEP_AddonPreferences(bpy.types.AddonPreferences):
 
 
 def menu_func_import(self, context):
-    self.layout.operator(ImportStepCADOperator.bl_idname, text="STEP (.step, .stp)")
+    self.layout.operator(
+        STEP_OT_ImportStepCADOperator.bl_idname, text="STEP (.step, .stp)"
+    )
 
 
 classes = (
     PG_Stepper,
-    ImportStepCADOperator,
+    STEP_OT_ImportStepCADOperator,
     STEP_OT_ClearCache,
     STEP_OT_RebuildSelected,
     STEP_OT_ReloadSTEP,
@@ -1197,6 +1208,7 @@ def unregister():
         bpy.utils.unregister_class(c)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     del bpy.types.Scene.stepper
+
 
 if __package__ == "__main__":
     register()

@@ -26,7 +26,7 @@ from . import trimesh
 from . import nurbs
 
 importlib.reload(trimesh)
-from OCP.BRep import BRep_Tool
+from OCP.BRep import BRep_Builder, BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert, BRepBuilderAPI_Transform
 from OCP.BRepLProp import BRepLProp_SLProps
@@ -66,7 +66,7 @@ from OCP.TopLoc import TopLoc_Location
 
 # from OCP.TopExp import topexp_MapShapes
 # from OCP.TopTools import TopTools_MapOfShape, TopTools_IndexedMapOfShape
-from OCP.TopoDS import TopoDS_Shape, TopoDS
+from OCP.TopoDS import TopoDS_Compound, TopoDS_Shape, TopoDS
 from OCP.XCAFApp import XCAFApp_Application
 from OCP.XCAFDoc import (
     XCAFDoc_DocumentTool,
@@ -771,6 +771,21 @@ class ReadSTEP:
         face_data = OrderedDict()
         batch = 0
 
+        # Clean all previous triangulations, then mesh all shapes at once in a
+        # single C++ call so OCCT's OSD_Parallel can distribute all faces across
+        # threads without Python-loop overhead between shapes.
+        for shp in iter_shapes:
+            BRepTools.Clean_s(shp)
+
+        builder = BRep_Builder()
+        compound = TopoDS_Compound()
+        builder.MakeCompound(compound)
+        for shp in iter_shapes:
+            builder.Add(compound, shp)
+
+        brepmesh = BRepMesh_IncrementalMesh(compound, lin_def, False, ang_def, True)
+        brepmesh.Perform()
+
         # Iterate over the main shape and its sub shapes
         for _, shp in enumerate(iter_shapes):
             col = self.face_colors[shp]
@@ -780,17 +795,12 @@ class ReadSTEP:
             else:
                 col_name = ""
 
-            # Clean all previous triangulations
-            BRepTools.Clean_s(shp)
-
             # Subshape transforms can be different from the mainshape transform
             ex = TopExp_Explorer(shp, TopAbs_FACE)
             if not ex.More():
                 self.import_problems["Empty shape"] += 1
                 continue
 
-            brepmesh = BRepMesh_IncrementalMesh(shp, lin_def, False, ang_def, False)
-            brepmesh.Perform()
             trf = shp.Location().Transformation()
             # Iterate through faces with TopExp_Explorer
             while ex.More():

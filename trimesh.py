@@ -95,57 +95,55 @@ class TriMesh:
         return None
 
     def filter_zero_area(self):
-        """Remove all tris with zero area"""
-        new_tris = []
-        for t in self.tris:
-            locs = tuple(self.verts[i] for i in t.indices)
-            same_loc = locs[0] == locs[1] or locs[1] == locs[2] or locs[2] == locs[0]
-            if not same_loc:
-                new_tris.append(t)
-        self.tris = new_tris
+        """Remove all tris with zero area.
+        Assumes fuse_verts() has been called so co-located verts share the same index."""
+        if not self.tris:
+            return
+        idx = np.array([t.indices for t in self.tris], dtype=np.int32)
+        keep = ~(
+            (idx[:, 0] == idx[:, 1])
+            | (idx[:, 1] == idx[:, 2])
+            | (idx[:, 2] == idx[:, 0])
+        )
+        self.tris = [t for i, t in enumerate(self.tris) if keep[i]]
 
     def filter_same_face(self):
-        """Remove all duplicate tris"""
-        # TODO: might cause color issue
-        new_tris = []
-        faces = set([])
-        for t in self.tris:
-            locs = tuple(self.verts[i] for i in t.indices)
-            f_hash = tuple(sorted(locs))
-            if f_hash not in faces:
-                faces.add(f_hash)
-                new_tris.append(t)
-        self.tris = new_tris
+        """Remove all duplicate tris.
+        Assumes fuse_verts() has been called so co-located verts share the same index."""
+        if not self.tris:
+            return
+        idx = np.array([t.indices for t in self.tris], dtype=np.int32)
+        # Sort each row to get a canonical (order-independent) face key
+        _, first_occ = np.unique(np.sort(idx, axis=1), axis=0, return_index=True)
+        keep = np.zeros(len(self.tris), dtype=bool)
+        keep[first_occ] = True
+        self.tris = [t for i, t in enumerate(self.tris) if keep[i]]
 
     def fuse_verts(self):
         """Make verts in identical locations the same, update tris"""
-
+        n_verts = len(self.verts)
+        tri_map_arr = np.empty(n_verts, dtype=np.int32)
         verts = {}
-        tri_map = {}
         new_verts = []
         new_index = 0
         for vi, v in enumerate(self.verts):
-            # Find duplicate verts based on location "hash"
             v_hash = tuple(v)
             if v_hash not in verts:
                 new_verts.append(v)
                 verts[v_hash] = new_index
-                tri_map[vi] = new_index
+                tri_map_arr[vi] = new_index
                 new_index += 1
             else:
-                # Vert already exists in new_verts
-                tri_map[vi] = verts[v_hash]
+                tri_map_arr[vi] = verts[v_hash]
 
-        # Change tri indices to match new fused verts
-        new_tris = []
-        for ti, t in enumerate(self.tris):
-            idcs = tuple(tri_map[i] for i in t.indices)
-            new_tris.append(self.tris[ti])
-            new_tris[-1].indices = idcs
+        # Vectorised tri index remapping: build (N,3) index array, apply map, write back
+        if self.tris:
+            old_idx = np.array([t.indices for t in self.tris], dtype=np.int32)  # (N,3)
+            new_idx = tri_map_arr[old_idx]  # (N,3) vectorised lookup
+            for ti, t in enumerate(self.tris):
+                t.indices = (int(new_idx[ti, 0]), int(new_idx[ti, 1]), int(new_idx[ti, 2]))
 
-        # Save new data
         self.verts = new_verts
-        self.tris = new_tris
 
     def add_mesh(self, other):
         # Fast path: shift indices in-place and extend lists without allocating

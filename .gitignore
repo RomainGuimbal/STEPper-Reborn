@@ -1,5 +1,6 @@
 *.blend1
 *.pyc
 *.pdf
+*.prof
 
 __pycache__/

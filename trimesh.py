@@ -148,20 +148,21 @@ class TriMesh:
         self.tris = new_tris
 
     def add_mesh(self, other):
-        # Fast path: shift indices and extend lists without per-triangle hashing.
+        # Fast path: shift indices in-place and extend lists without allocating
+        # new TriData objects.  The source face-meshes are discarded after
+        # merging, so mutating their indices is safe.
         # tri_hash is intentionally not updated here; it is only needed by
         # add_tri_overwrite which is not used in the main import pipeline.
         offset = len(self.verts)
         self.verts.extend(other.verts)
-        for t in other.tris:
-            shifted = (
-                t.indices[0] + offset,
-                t.indices[1] + offset,
-                t.indices[2] + offset,
-            )
-            self.tris.append(
-                TriData(shifted, t.norms, t.uvs, t.color, t.material, t.material_name, t.batch)
-            )
+        if offset:
+            for t in other.tris:
+                t.indices = (
+                    t.indices[0] + offset,
+                    t.indices[1] + offset,
+                    t.indices[2] + offset,
+                )
+        self.tris.extend(other.tris)
 
     def add_mesh_overwrite_identical(self, other):
         # assert other is TriMesh
@@ -348,19 +349,11 @@ class TriMesh:
 
     def get_loop_colors(self):
         "Return colors in triangle loop creation order"
-        cols = []
-        for t in self.tris:
-            for _ in range(3):
-                cols.append(t.color)
-        return cols
+        return [t.color for t in self.tris for _ in range(3)]
 
     def get_loop_material_names(self):
         "Return material names in triangle loop creation order"
-        cols = []
-        for t in self.tris:
-            for _ in range(3):
-                cols.append(t.material_name)
-        return cols
+        return [t.material_name for t in self.tris for _ in range(3)]
 
     def get_loop_normals(self):
         "Return normals in triangle loop creation order as a (N*3, 3) float32 numpy array"
@@ -374,8 +367,4 @@ class TriMesh:
 
     def get_loop_uvs(self):
         "Return UVs in triangle loop creation order"
-        uvs = []
-        for t in self.tris:
-            for i in range(3):
-                uvs.append(t.uvs[i])
-        return uvs
+        return [uv for t in self.tris for uv in t.uvs]

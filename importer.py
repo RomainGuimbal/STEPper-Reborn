@@ -623,7 +623,7 @@ class ReadSTEP:
         tree = _get_shapes()
         self.tree = tree
 
-    def triangulate_face(self, face, tform):
+    def triangulate_face(self, face, tform, color=None, col_name=None, batch=None):
         bt = BRep_Tool()
         location = TopLoc_Location()
         facing = bt.Triangulation_s(face, location)
@@ -636,30 +636,7 @@ class ReadSTEP:
         surface = BRepAdaptor_Surface(face)
         prop = BRepLProp_SLProps(surface, 2, gp.Resolution_s())
         # prop = BRepLProp_SLProps(surface, 2, 1e-4)
-        # face_uv = facing.UVNode()
 
-        # Calculate UV bounds
-        Umin, Umax, Vmin, Vmax = 0.0, 0.0, 0.0, 0.0
-        # for t in range(1, face_uv.Length()):
-        for t in range(1, facing.NbNodes() + 1):
-            # v = face_uv.Value(t)
-            v = facing.UVNode(t)
-            x, y = v.X(), v.Y()
-            if t == 1:
-                Umin, Umax, Vmin, Vmax = x, x, y, y
-            if x < Umin:
-                Umin = x
-            if x > Umax:
-                Umin = x
-            if y < Vmin:
-                Vmin = y
-            if y > Vmax:
-                Vmin = y
-
-        Ucenter = (Umin + Umax) * 0.5
-        Vcenter = (Vmin + Vmax) * 0.5
-
-        # tab = facing.Nodes()
         tri = facing.Triangles()
 
         verts = []
@@ -668,51 +645,58 @@ class ReadSTEP:
         uvs = []
 
         undef_normals = False
+        is_reversed = face.Orientation() == TopAbs_REVERSED
 
         itform = tform.Inverted()
 
-        # Build normals
+        # Single pass: fetch every node and its UV together, accumulate bounds.
+        # Previously two separate loops both called facing.UVNode(t), doubling
+        # the number of C++ calls.  The bounds are only needed for Ucenter/
+        # Vcenter used to nudge UVs slightly away from surface edges.
         d_nbnodes = facing.NbNodes()
+        Umin = Umax = Vmin = Vmax = None
         for t in range(1, d_nbnodes + 1):
-            # pt = tab.Value(t)
             pt = facing.Node(t)
-            loc = b_XYZ(pt)
-
-            # nvert = bm.verts.new(loc)
-            # nvert.index = t - 1
-
-            # assert len(loc) == 3
-            # assert loc[0] is float
-            # assert loc is tuple
-            verts.append(loc)
-
-            # Get triangulation normal
-
-            # pt = gp_Pnt(loc[0], loc[1], loc[2])
-            # pt_surf = GeomAPI_ProjectPointOnSurf(pt, nsurf)
-            # fU, fV = pt_surf.Parameters(1)
-            # prop = GeomLProp_SLProps(nsurf, fU, fV, 2, gp.Resolution_s())
+            verts.append(b_XYZ(pt))
 
             uv = facing.UVNode(t)
             u, v = uv.X(), uv.Y()
             uvs.append((u, v))
 
-            # The edges of UV give invalid normals, hence this
+            # Accumulate UV bounds (fix: previously Umax/Vmax were never updated)
+            if Umin is None:
+                Umin = Umax = u
+                Vmin = Vmax = v
+            else:
+                if u < Umin:
+                    Umin = u
+                elif u > Umax:
+                    Umax = u
+                if v < Vmin:
+                    Vmin = v
+                elif v > Vmax:
+                    Vmax = v
+
+        Ucenter = (Umin + Umax) * 0.5
+        Vcenter = (Vmin + Vmax) * 0.5
+
+        # Build normals using the already-cached UVs
+        for i in range(d_nbnodes):
+            u, v = uvs[i]
+            # The edges of UV give invalid normals, hence this nudge
             prop.SetParameters(
                 (u - Ucenter) * 0.999 + Ucenter, (v - Vcenter) * 0.999 + Vcenter
             )
 
             if prop.IsNormalDefined():
                 normal = prop.Normal().Transformed(itform)
-                # normal = prop.Normal()
                 nn = np.array(b_XYZ(normal))
-                if face.Orientation() == TopAbs_REVERSED:
+                if is_reversed:
                     nn = -nn
             else:
                 nn = np.array((0.0, 0.0, 1.0))
                 undef_normals = True
 
-            # norms.append(tuple(float(nnn) for nnn in nn))
             norms.append(np.float32(nn))
 
         # Build triangulation
@@ -723,36 +707,23 @@ class ReadSTEP:
             if face.Orientation() != TopAbs_FORWARD:
                 T1, T2 = T2, T1
 
-            # v_list = (verts[T1 - 1], verts[T2 - 1], verts[T3 - 1])
-            # nf = bm.faces.new(v_list)
-            # nf.smooth = True
-            # nf.normal_update()
             tris.append((T1 - 1, T2 - 1, T3 - 1))
-
-            # for v in (T1, T2, T3):
-            #     if norms[v - 1] is None:
-            #         added_norms.append(np.array(nf.normal))
-            #     else:
-            #         added_norms.append(norms[v - 1])
-
-            # new_norms.append(norms[v - 1])
 
         if undef_normals:
             self.import_problems["Undefined normals"] += 1
 
-        tri_data = []
-        for ti, t in enumerate(tris):
-            tri_data.append(
-                trimesh.TriData(
-                    t,
-                    [norms[i] for i in t],
-                    [uvs[i] for i in t],
-                    None,
-                    None,
-                    None,
-                    None,
-                )
+        tri_data = [
+            trimesh.TriData(
+                t,
+                [norms[i] for i in t],
+                [uvs[i] for i in t],
+                color,
+                None,
+                col_name,
+                batch,
             )
+            for t in tris
+        ]
 
         return trimesh.TriMesh(verts=verts, tris=tri_data)
 
@@ -807,14 +778,13 @@ class ReadSTEP:
                 exc = ex.Current()
                 face = TopoDS.Face_s(exc)
 
-                mesh = self.triangulate_face(face, trf)
+                mesh = self.triangulate_face(
+                    face, trf,
+                    color=col_rgb if col is not None else None,
+                    col_name=col_name if col is not None else None,
+                    batch=batch,
+                )
                 if mesh:
-                    # If shape or sub-shape has defined color, set it so
-                    mesh.set_batch(batch)
-                    if col is not None:
-                        mesh.colorize(col_rgb)
-                        mesh.set_material_name(col_name)
-
                     # First filter in overwriting a face/color
                     face_data[face] = (0, mesh, "EMPTY")
 

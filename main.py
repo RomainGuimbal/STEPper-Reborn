@@ -315,9 +315,14 @@ def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
     #     size = shape_size(shp)
     #     angd *= size
 
+    import time
+
+    start_time = time.time()
     mesh: TriMesh = step_reader.build_trimesh(
         shp, lin_def=lind, ang_def=angd, hacks=hacks
     )
+    end_time = time.time()
+    print(f"Trimesh build time: {end_time - start_time:.2f} seconds")
 
     mesh.fuse_verts()
     mesh.filter_zero_area()

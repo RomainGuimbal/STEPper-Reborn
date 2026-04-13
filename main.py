@@ -310,30 +310,89 @@ def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
     if bpy.context.scene.stepper.hack_skip_zero_solids:
         hacks.add("skip_solids")
 
-    # adaptative = bpy.context.scene.stepper.use_adaptive_resolution
-    # if adaptative :
-    #     size = shape_size(shp)
-    #     angd *= size
-
-    import time
-
+    # import cProfile
+    # profiler = cProfile.Profile()
+    # profiler.enable()
     start_time = time.time()
+
     mesh: TriMesh = step_reader.build_trimesh(
         shp, lin_def=lind, ang_def=angd, hacks=hacks
     )
-    end_time = time.time()
-    print(f"Trimesh build time: {end_time - start_time:.2f} seconds")
+    print(f"Mesh build time elapsed: {time.time()-start_time:.2f}", end="")
+
+    # profiler.disable()
+    # profiler.dump_stats("profile_output.prof")
 
     mesh.fuse_verts()
     mesh.filter_zero_area()
     mesh.filter_same_face()
 
     print(f"[bm] {len(mesh.verts)}", end="")
+
+    # --- Build geometry at C level (replaces N individual bm.verts.new /
+    #     bm.faces.new Python calls in add_to_bm) ---
+    objdata = obj.data
+    objdata.from_pydata(mesh.verts, [], [t.indices for t in mesh.tris])
+
+    # Load into BMesh for edge marking and color / material assignment.
+    # from_mesh() is a single C-level bulk operation, much faster than
+    # constructing the BMesh vertex by vertex.
     bm = bmesh.new()
-    mesh.add_to_bm(bm, edges_as_seams=True, discontinuity_as_sharp=True)
+    bm.from_mesh(objdata)
+    bm.faces.ensure_lookup_table()
+    bm.edges.ensure_lookup_table()
+    bm.verts.ensure_lookup_table()
+
+    # Seam edges: mark boundaries between different shape batches
+    for e in bm.edges:
+        f = e.link_faces
+        if len(f) == 2 and mesh.tris[f[0].index].batch != mesh.tris[f[1].index].batch:
+            e.seam = True
+
+    # Sharp edges: mark where per-vertex normals are discontinuous
+    def _project_plane_normalize(plane, vec):
+        prj = vec - (plane * np.dot(plane, vec))
+        prjn = np.linalg.norm(prj)
+        return prj / prjn if prjn != 0.0 else np.array([0.0, 0.0, 1.0])
+
+    def _prjtest(plane, norms_list, margin):
+        p0 = _project_plane_normalize(plane, norms_list[0])
+        dmax = 1.0
+        for v in norms_list[1:]:
+            prj = _project_plane_normalize(plane, v)
+            dd = np.dot(p0, prj)
+            if dd < dmax:
+                dmax = dd
+        return dmax < 1.0 - margin
+
+    margin = 0.02
+    for e in bm.edges:
+        fi = [f.index for f in e.link_faces]
+        if len(fi) != 2:
+            continue
+        t0, t1 = mesh.tris[fi[0]], mesh.tris[fi[1]]
+        e_norms = [[], []]
+        for i in range(3):
+            if t0.indices[i] == e.verts[0].index:
+                e_norms[0].append(t0.norms[i])
+            if t1.indices[i] == e.verts[0].index:
+                e_norms[0].append(t1.norms[i])
+            if t0.indices[i] == e.verts[1].index:
+                e_norms[1].append(t0.norms[i])
+            if t1.indices[i] == e.verts[1].index:
+                e_norms[1].append(t1.norms[i])
+        if not e_norms[0] or not e_norms[1]:
+            e.smooth = True
+            continue
+        plane = np.array((e.verts[0].co - e.verts[1].co).normalized())
+        if _prjtest(plane, e_norms[0], margin) and _prjtest(plane, e_norms[1], margin):
+            e.smooth = False
+        else:
+            e.smooth = True
+
     mesh.fill_empty_color()
     bpy_update_object_data(
-        obj.data,
+        objdata,
         bm,
         vcol_name,
         mesh.get_loop_colors(),

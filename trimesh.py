@@ -148,17 +148,19 @@ class TriMesh:
         self.tris = new_tris
 
     def add_mesh(self, other):
-        # assert other is TriMesh
-        for i in range(len(other.tris)):
-            otr = other.tris[i]
-            self.add_tri(
-                [other.verts[t] for t in otr.indices],
-                otr.norms,
-                otr.color,
-                otr.material,
-                otr.material_name,
-                otr.uvs,
-                otr.batch,
+        # Fast path: shift indices and extend lists without per-triangle hashing.
+        # tri_hash is intentionally not updated here; it is only needed by
+        # add_tri_overwrite which is not used in the main import pipeline.
+        offset = len(self.verts)
+        self.verts.extend(other.verts)
+        for t in other.tris:
+            shifted = (
+                t.indices[0] + offset,
+                t.indices[1] + offset,
+                t.indices[2] + offset,
+            )
+            self.tris.append(
+                TriData(shifted, t.norms, t.uvs, t.color, t.material, t.material_name, t.batch)
             )
 
     def add_mesh_overwrite_identical(self, other):
@@ -361,12 +363,14 @@ class TriMesh:
         return cols
 
     def get_loop_normals(self):
-        "Return normals in triangle loop creation order"
-        norms = []
-        for t in self.tris:
-            for i in range(3):
-                norms.append(t.norms[i])
-        return norms
+        "Return normals in triangle loop creation order as a (N*3, 3) float32 numpy array"
+        n = len(self.tris)
+        result = np.empty((n * 3, 3), dtype=np.float32)
+        for ti, t in enumerate(self.tris):
+            result[ti * 3]     = t.norms[0]
+            result[ti * 3 + 1] = t.norms[1]
+            result[ti * 3 + 2] = t.norms[2]
+        return result
 
     def get_loop_uvs(self):
         "Return UVs in triangle loop creation order"

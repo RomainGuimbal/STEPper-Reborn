@@ -1,6 +1,6 @@
 schema_version = "1.0.0"
 
-id = "stepper_reborn"
+id = "STEPper_Reborn"
 version = "2.1.0"
 name = "STEPper Reborn"
 tagline = "CAD importer"
@@ -15,7 +15,7 @@ blender_version_min = "5.1.0"
 
 license = ["SPDX:GPL-3.0-or-later"]
 
-copyright = ["2026 Romain Guimbal"]
+copyright = ["2021 Tommi Hyppänen, 2025 Romain Guimbal"]
 
 platforms = ["windows-x64", "macos-x64", "macos-arm64", "linux-x64"]
 wheels = [

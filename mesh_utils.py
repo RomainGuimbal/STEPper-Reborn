@@ -16,7 +16,6 @@
 import numpy as np
 import bmesh
 import bpy
-from mathutils import Matrix, Vector
 
 # ---------------------------------------------------------------------------
 # Color / material helpers
@@ -70,6 +69,7 @@ def add_material(name, color, link_vertex_color=False, overwrite=False):
     # mat.shadow_method = "CLIP"
     # mat.node_tree.nodes["Image Texture"].image = image
     return mat
+
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +148,7 @@ def choose_hierarchy_types(htypes):
     return hierarchy_flat, hierarchy_tree, hierarchy_empties
 
 
-def transform_to_up(up, chosen_objects, scale, to_cursor=True, apply_scale=True):
+def transform_to_up(up, chosen_objects, scale, to_cursor=True):
     """
     Set all chosen_objects transforms <up>["X", "Y", "Z"] as up
     Optionally move to cursor <to_cursor>
@@ -194,30 +194,15 @@ def transform_to_up(up, chosen_objects, scale, to_cursor=True, apply_scale=True)
         # apply
         set_obj_matrix_world(obj, mat)
 
-    # Apply scale — bake scale into mesh vertices so obj.scale = (1,1,1)
-    # Uses direct vertex scaling instead of bpy.ops.object.transform_apply
-    # to avoid "Cannot apply to a multi user" errors on instanced meshes.
-    if apply_scale and scale != 1.0:
-        processed_meshes = set()
-        for obj in chosen_objects:
-            if obj.data is None:
-                continue
-            mesh = obj.data
-            if mesh not in processed_meshes:
-                vert_count = len(mesh.vertices)
-                if vert_count > 0:
-                    verts = np.empty(vert_count * 3, dtype=np.float32)
-                    mesh.vertices.foreach_get("co", verts)
-                    verts *= scale
-                    mesh.vertices.foreach_set("co", verts)
-                    mesh.update()
-                processed_meshes.add(mesh)
+    # Apply scale
+    # for obj in created_objs:
+    #     # Apply object scale
+    #     obj.select_set(True)
+    #     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    #     obj.select_set(False)
 
-        for obj in chosen_objects:
-            if obj.data is None:
-                continue
-            loc, rot, _ = obj.matrix_world.decompose()
-            obj.matrix_world = Matrix.LocRotScale(loc, rot, Vector((1.0, 1.0, 1.0)))
+    # for obj in created_objs:
+    #     obj.select_set(True)
 
 
 # ---------------------------------------------------------------------------

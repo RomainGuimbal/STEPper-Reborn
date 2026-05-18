@@ -833,33 +833,35 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
             # row.prop(prg, "fw_as")
 
     def execute(self, context):
-        folder = os.path.dirname(self.filepath)
+        from viztracer import VizTracer
+        with VizTracer(output_file="/tmp/blender_trace.json") as tracer:
+            folder = os.path.dirname(self.filepath)
 
-        # print(type(self.files))
-        # print(dir(self.files))
-        l_def, a_def = self.lin_deflection * 2000, self.ang_deflection
-        if bpy.context.scene.stepper.simpler_parameters:
-            a_def, l_def = calculate_detail_level(self.detail_level)
+            # print(type(self.files))
+            # print(dir(self.files))
+            l_def, a_def = self.lin_deflection * 2000, self.ang_deflection
+            if bpy.context.scene.stepper.simpler_parameters:
+                a_def, l_def = calculate_detail_level(self.detail_level)
 
-        import_files = [i.name for i in self.files]
+            import_files = [i.name for i in self.files]
 
-        if self.override_file != "":
-            import_files = [self.override_file]
+            if self.override_file != "":
+                import_files = [self.override_file]
 
-        # iterate through the selected files
-        for j, i in enumerate(import_files):
-            # generate full path to file
-            path_to_file = os.path.join(folder, i)
-            print("Opening file:", path_to_file)
-            result = load_step(
-                context,
-                path_to_file,
-                custom_scale=self.user_scale if self.custom_scale else None,
-                lin_deflection=l_def,
-                ang_deflection=a_def,
-                up_as=self.up_as,
-                htypes=self.hierarchy_types,
-            )
+            # iterate through the selected files
+            for _, i in enumerate(import_files):
+                # generate full path to file
+                path_to_file = os.path.join(folder, i)
+                print("Opening file:", path_to_file)
+                result = load_step(
+                    context,
+                    path_to_file,
+                    custom_scale=self.user_scale if self.custom_scale else None,
+                    lin_deflection=l_def,
+                    ang_deflection=a_def,
+                    up_as=self.up_as,
+                    htypes=self.hierarchy_types,
+                )
         if result:
             return {"FINISHED"}
         else:

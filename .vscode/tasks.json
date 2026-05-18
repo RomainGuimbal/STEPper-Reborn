@@ -13,12 +13,11 @@
       // ],
       "problemMatcher": []
     },
-
     {
-      "label": "Plot Profile",
+      "label": "Open Profile",
       "type": "shell",
-      "command": "python",
-      "args": ["-m", "snakeviz", "profile_output.prof"],
+      "command": "vizviewer",
+      "args": ["C:/tmp/blender_trace.json"],
       "problemMatcher": []
     }
   ]

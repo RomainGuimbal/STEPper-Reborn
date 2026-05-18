@@ -1,0 +1,10 @@
+{
+  "buttons": [
+    {
+      "name": "",
+      "task": "Start Blender",
+      "icon": "🍊",
+      "tooltip": "Start Blender"
+    }
+  ]
+}

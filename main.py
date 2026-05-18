@@ -109,7 +109,7 @@ def bpy_update_object_data(
     if not colors:
         return
 
-    n_loops = len(colors)   # = N_tris * 3
+    n_loops = len(colors)  # = N_tris * 3
     n_faces = n_loops // 3
 
     # All 3 loops of a triangle share the same per-face color/mat_name.
@@ -125,7 +125,7 @@ def bpy_update_object_data(
 
     for fi in range(n_faces):
         col = colors[fi * 3]
-        mn  = mat_names[fi * 3]
+        mn = mat_names[fi * 3]
         if col is not None and col[0] >= 0.0:
             r, g, b = float(col[0]), float(col[1]), float(col[2])
         else:
@@ -285,18 +285,12 @@ def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
     if bpy.context.scene.stepper.hack_skip_zero_solids:
         hacks.add("skip_solids")
 
-    # import cProfile
-    # profiler = cProfile.Profile()
-    # profiler.enable()
     start_time = time.time()
 
     mesh: TriMesh = step_reader.build_trimesh(
         shp, lin_def=lind, ang_def=angd, hacks=hacks
     )
     print(f"Mesh build time elapsed: {time.time()-start_time:.2f}", end="")
-
-    # profiler.disable()
-    # profiler.dump_stats("profile_output.prof")
 
     mesh.fuse_verts()
     mesh.filter_zero_area()
@@ -831,6 +825,14 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
         header, body = layout.panel("Resolution", default_closed=False)
         header.label(text="General")
         if body:
+            # Orientation
+            row = body.row()
+            row.prop(self, "up_as")
+
+            # Hierarchy
+            row = body.row()
+            row.prop(self, "hierarchy_types", text="Hierarchy")
+
             # Custom scale
             col = body.column(align=False, heading="Overwrite Scale")
             row = col.row(align=True)
@@ -839,14 +841,6 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
             sub = sub.row(align=True)
             sub.active = self.custom_scale
             sub.prop(self, "user_scale", text="")
-
-            # Orientation
-            row = body.row()
-            row.prop(self, "up_as")
-
-            # Hierarchy
-            row = body.row()
-            row.prop(self, "hierarchy_types", text="Hierarchy")
 
         header, body = layout.panel("Resolution", default_closed=False)
         header.label(text="Resolution")
@@ -869,33 +863,35 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
             # row.prop(prg, "fw_as")
 
     def execute(self, context):
-        folder = os.path.dirname(self.filepath)
+        from viztracer import VizTracer
+        with VizTracer(output_file="/tmp/blender_trace.json") as tracer:
+            folder = os.path.dirname(self.filepath)
 
-        # print(type(self.files))
-        # print(dir(self.files))
-        l_def, a_def = self.lin_deflection * 2000, self.ang_deflection
-        if bpy.context.scene.stepper.simpler_parameters:
-            a_def, l_def = calculate_detail_level(self.detail_level)
+            # print(type(self.files))
+            # print(dir(self.files))
+            l_def, a_def = self.lin_deflection * 2000, self.ang_deflection
+            if bpy.context.scene.stepper.simpler_parameters:
+                a_def, l_def = calculate_detail_level(self.detail_level)
 
-        import_files = [i.name for i in self.files]
+            import_files = [i.name for i in self.files]
 
-        if self.override_file != "":
-            import_files = [self.override_file]
+            if self.override_file != "":
+                import_files = [self.override_file]
 
-        # iterate through the selected files
-        for j, i in enumerate(import_files):
-            # generate full path to file
-            path_to_file = os.path.join(folder, i)
-            print("Opening file:", path_to_file)
-            result = load_step(
-                context,
-                path_to_file,
-                custom_scale=self.user_scale if self.custom_scale else None,
-                lin_deflection=l_def,
-                ang_deflection=a_def,
-                up_as=self.up_as,
-                htypes=self.hierarchy_types,
-            )
+            # iterate through the selected files
+            for _, i in enumerate(import_files):
+                # generate full path to file
+                path_to_file = os.path.join(folder, i)
+                print("Opening file:", path_to_file)
+                result = load_step(
+                    context,
+                    path_to_file,
+                    custom_scale=self.user_scale if self.custom_scale else None,
+                    lin_deflection=l_def,
+                    ang_deflection=a_def,
+                    up_as=self.up_as,
+                    htypes=self.hierarchy_types,
+                )
         if result:
             return {"FINISHED"}
         else:

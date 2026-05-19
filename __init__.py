@@ -24,7 +24,6 @@ import bpy
 from bpy.props import StringProperty
 from bpy_extras.io_utils import ImportHelper
 from .utils import (
-    set_obj_matrix_world,
     obj_unlink_all,
     calculate_detail_level,
     transform_to_up,
@@ -86,21 +85,23 @@ def load_step(
 
     wm.progress_begin(0, total)
     for i, (shp, node_index) in enumerate(all_shapes):
-        created_objs.append(
-            mesh_from_shape(
-                step_reader,
-                shp,
-                filename,
-                filepath,
-                hierarchy_empties,
-                node_index,
-                created_names,
-                lin_deflection,
-                ang_deflection,
-                created_uuid,
-                total,
-            )
+        obj = mesh_from_shape(
+            step_reader,
+            shp,
+            tree,
+            filename,
+            filepath,
+            hierarchy_empties,
+            node_index,
+            created_names,
+            lin_deflection,
+            ang_deflection,
+            created_uuid,
+            total,
+            i,
         )
+        if obj:
+            created_objs.append(obj)
         wm.progress_update(i)
 
     # assert len(created_objs) == len(shapes_labels)

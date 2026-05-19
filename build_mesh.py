@@ -1,8 +1,6 @@
 import bpy
 import bmesh
-import time
 import numpy as np
-from sklearn import tree
 from .trimesh import TriMesh
 from .utils import bpy_update_object_data, create_new_obj_with_mesh
 
@@ -12,12 +10,9 @@ def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
     if bpy.context.scene.stepper.hack_skip_zero_solids:
         hacks.add("skip_solids")
 
-    start_time = time.time()
-
     mesh: TriMesh = step_reader.build_trimesh(
         shp, lin_def=lind, ang_def=angd, hacks=hacks
     )
-    print(f"Mesh build time elapsed: {time.time()-start_time:.2f}", end="")
 
     mesh.fuse_verts()
     mesh.filter_zero_area()
@@ -103,6 +98,7 @@ def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
 def mesh_from_shape(
     step_reader,
     shp,
+    tree,
     filename,
     filepath,
     hierarchy_empties,
@@ -111,7 +107,8 @@ def mesh_from_shape(
     lin_deflection,
     ang_deflection,
     created_uuid,
-    total
+    total,
+    i,
 ):
     parent_uuid, self_uuid, tag, name, _, local_t, global_t = tree.nodes[
         node_index
@@ -121,7 +118,7 @@ def mesh_from_shape(
         name = filename + ".empties"
 
     shape_name = "tt_" + repr(tag)
-    
+
     obj = None
 
     # Shape found in leaf
@@ -132,21 +129,15 @@ def mesh_from_shape(
         # If object already build, just copy it, using linked mesh data
         if shape_name in created_names:
             print("[Link]", end="", flush=True)
-
             source_obj = created_names[shape_name]
             obj = source_obj.copy()
-        else:
-            print("[Build]", end="", flush=True)
 
-            # Create new mesh and object from scratch
+        else:  # Create new mesh and object from scratch
+            print("[Build]", end="", flush=True)
             obj = create_new_obj_with_mesh(name)
             bpy.ops.object.mode_set(mode="OBJECT")
             build_mesh(step_reader, obj, shp, lin_deflection, ang_deflection)
-
             created_names[shape_name] = obj
-
-            # bpy.ops.object.mode_set(mode="OBJECT")
-            # build_mesh(step_reader, obj, shp, lin_deflection, ang_deflection)
 
     # No shape in leaf, empty creation enabled, do this
     elif hierarchy_empties:
@@ -154,7 +145,6 @@ def mesh_from_shape(
         obj = bpy.data.objects.new(name, None)
         obj.empty_display_size = 2
         obj.empty_display_type = "PLAIN_AXES"
-
         # set_obj_matrix_world(obj, global_t)
 
     # Object has been created
@@ -166,6 +156,5 @@ def mesh_from_shape(
         obj["STEP_file"] = filepath
         obj["STEP_name"] = name
         obj["STEP_tree_location"] = node_index
-        created_uuid[self_uuid] = obj
-
+        created_uuid[self_uuid] = obj    
     return obj

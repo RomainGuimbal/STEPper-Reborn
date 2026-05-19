@@ -331,7 +331,6 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
 
     def execute(self, context):
         from viztracer import VizTracer
-
         with VizTracer(output_file="/tmp/blender_trace.json") as tracer:
             folder = os.path.dirname(self.filepath)
 

@@ -33,7 +33,7 @@ from OCP.TDocStd import TDocStd_Document
 from OCP.XCAFApp import XCAFApp_Application_GetApplication
 from OCP.XCAFDoc import XCAFDoc_DocumentTool
 
-from .importer import get_label_name
+from .step_reader import get_label_name
 
 class StepAnalyzer:
     """A class that analyzes the structure of an OCAF document."""

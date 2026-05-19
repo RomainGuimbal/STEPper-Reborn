@@ -18,152 +18,22 @@
 import ntpath
 import os
 import time
-
-import numpy as np
 import math
-import bmesh
 import bpy
+
 from bpy.props import StringProperty
 from bpy_extras.io_utils import ImportHelper
-from .mesh_utils import (
-    bpy_update_object_data,
+from .utils import (
     set_obj_matrix_world,
     obj_unlink_all,
-    create_new_obj_with_mesh,
     calculate_detail_level,
     transform_to_up,
+    choose_hierarchy_types,
 )
-
-from .trimesh import TriMesh
+from .build_mesh import build_mesh, mesh_from_shape
+from .build_blender_hierarchy import build_blender_hierarchy
 
 global_file_cache = {}
-
-
-def choose_hierarchy_types(htypes):
-    """
-    Return hierarchy types selection from input string
-    """
-    hierarchy_flat = False
-    hierarchy_tree = False
-    hierarchy_empties = False
-
-    if htypes == "FLAT_AND_TREE":
-        hierarchy_flat = True
-        hierarchy_tree = True
-    elif htypes == "TREE":
-        hierarchy_tree = True
-    elif htypes == "FLAT":
-        hierarchy_flat = True
-    elif htypes == "EMPTIES":
-        hierarchy_empties = True
-    else:
-        assert False, "Invalid input parameter"
-
-    return hierarchy_flat, hierarchy_tree, hierarchy_empties
-
-
-from OCP.AIS import AIS_Shape
-
-
-def shape_size(shp):
-    bb = AIS_Shape(shp).BoundingBox()
-    if bb.IsVoid():
-        return 1.0
-    diag = (bb.CornerMax().Distance(bb.CornerMin())) / 100000
-    return diag
-
-
-def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
-    hacks = set([])
-    if bpy.context.scene.stepper.hack_skip_zero_solids:
-        hacks.add("skip_solids")
-
-    start_time = time.time()
-
-    mesh: TriMesh = step_reader.build_trimesh(
-        shp, lin_def=lind, ang_def=angd, hacks=hacks
-    )
-    print(f"Mesh build time elapsed: {time.time()-start_time:.2f}", end="")
-
-    mesh.fuse_verts()
-    mesh.filter_zero_area()
-    mesh.filter_same_face()
-
-    print(f"[bm] {len(mesh.verts)}", end="")
-
-    # --- Build geometry at C level (replaces N individual bm.verts.new /
-    #     bm.faces.new Python calls in add_to_bm) ---
-    objdata = obj.data
-    objdata.from_pydata(mesh.verts, [], [t.indices for t in mesh.tris])
-
-    # Load into BMesh for edge marking and color / material assignment.
-    # from_mesh() is a single C-level bulk operation, much faster than
-    # constructing the BMesh vertex by vertex.
-    bm = bmesh.new()
-    bm.from_mesh(objdata)
-    bm.faces.ensure_lookup_table()
-    bm.edges.ensure_lookup_table()
-    bm.verts.ensure_lookup_table()
-
-    # Pre-extract batch per face to avoid repeated Python attribute access in loop
-    batches = [t.batch for t in mesh.tris]
-
-    # Seam edges: mark boundaries between different shape batches
-    for e in bm.edges:
-        f = e.link_faces
-        if len(f) == 2 and batches[f[0].index] != batches[f[1].index]:
-            e.seam = True
-
-    # Sharp edges: mark where per-vertex normals are discontinuous.
-    # Pre-build face_vert_norms[face_idx][global_vert_idx] = norm to replace
-    # the inner range(3) scan with O(1) dict lookups.
-    face_vert_norms = [{t.indices[j]: t.norms[j] for j in range(3)} for t in mesh.tris]
-
-    def _project_plane_normalize(plane, vec):
-        prj = vec - (plane * np.dot(plane, vec))
-        prjn = np.linalg.norm(prj)
-        return prj / prjn if prjn != 0.0 else np.array([0.0, 0.0, 1.0])
-
-    def _prjtest(plane, n0, n1, margin):
-        p0 = _project_plane_normalize(plane, n0)
-        prj = _project_plane_normalize(plane, n1)
-        return np.dot(p0, prj) < 1.0 - margin
-
-    margin = 0.02
-    for e in bm.edges:
-        fi = [f.index for f in e.link_faces]
-        if len(fi) != 2:
-            continue
-        fvn0 = face_vert_norms[fi[0]]
-        fvn1 = face_vert_norms[fi[1]]
-        ev0 = e.verts[0].index
-        ev1 = e.verts[1].index
-        n00 = fvn0.get(ev0)
-        n10 = fvn1.get(ev0)
-        n01 = fvn0.get(ev1)
-        n11 = fvn1.get(ev1)
-        if n00 is None or n10 is None or n01 is None or n11 is None:
-            e.smooth = True
-            continue
-        plane = np.array((e.verts[0].co - e.verts[1].co).normalized())
-        if _prjtest(plane, n00, n10, margin) and _prjtest(plane, n01, n11, margin):
-            e.smooth = False
-        else:
-            e.smooth = True
-
-    mesh.fill_empty_color()
-    bpy_update_object_data(
-        objdata,
-        bm,
-        vcol_name,
-        mesh.get_loop_colors(),
-        mesh.get_loop_uvs(),
-        mesh.get_loop_normals(),
-        mesh.get_loop_material_names(),
-        build_materials=bpy.context.scene.stepper.build_materials,
-    )
-
-    return mesh.matrix
 
 
 def load_step(
@@ -176,7 +46,7 @@ def load_step(
     up_as="Y",
     htypes="TREE",
 ):
-    from . import importer
+    from .step_reader import ReadSTEP
 
     hierarchy_flat, hierarchy_tree, hierarchy_empties = choose_hierarchy_types(htypes)
 
@@ -184,7 +54,7 @@ def load_step(
 
     if filepath not in global_file_cache:
         try:
-            step_reader = importer.ReadSTEP(filepath)
+            step_reader = ReadSTEP(filepath)
             global_file_cache[filepath] = step_reader
         except AssertionError as e:
             print(e)
@@ -216,64 +86,22 @@ def load_step(
 
     wm.progress_begin(0, total)
     for i, (shp, node_index) in enumerate(all_shapes):
-        parent_uuid, self_uuid, tag, name, _, local_t, global_t = tree.nodes[
-            node_index
-        ].get_values()
-
-        if name == "root":
-            name = filename + ".empties"
-
-        shape_name = "tt_" + repr(tag)
-        wm.progress_update(i)
-        obj = None
-
-        # Shape found in leaf
-        if shp:
-            print(
-                "\nBuilding ({}/{}): {} ".format(i + 1, total, name), end="", flush=True
+        created_objs.append(
+            mesh_from_shape(
+                step_reader,
+                shp,
+                filename,
+                filepath,
+                hierarchy_empties,
+                node_index,
+                created_names,
+                lin_deflection,
+                ang_deflection,
+                created_uuid,
+                total,
             )
-            print("[T" + repr(shp.ShapeType()) + "]", end="", flush=True)
-
-            # If object already build, just copy it, using linked mesh data
-            if shape_name in created_names:
-                print("[Link]", end="", flush=True)
-
-                source_obj = created_names[shape_name]
-                obj = source_obj.copy()
-                created_objs.append(obj)
-            else:
-                print("[Build]", end="", flush=True)
-
-                # Create new mesh and object from scratch
-                obj = create_new_obj_with_mesh(name)
-                bpy.ops.object.mode_set(mode="OBJECT")
-                build_mesh(step_reader, obj, shp, lin_deflection, ang_deflection)
-
-                created_objs.append(obj)
-                created_names[shape_name] = obj
-
-                # bpy.ops.object.mode_set(mode="OBJECT")
-                # build_mesh(step_reader, obj, shp, lin_deflection, ang_deflection)
-
-        # No shape in leaf, empty creation enabled, do this
-        elif hierarchy_empties:
-            # Create empty
-            obj = bpy.data.objects.new(name, None)
-            obj.empty_display_size = 2
-            obj.empty_display_type = "PLAIN_AXES"
-            created_objs.append(obj)
-            # set_obj_matrix_world(obj, global_t)
-
-        # Object has been created
-        if obj:
-            # assign property to obj
-            obj["STEP_tag"] = tag
-            obj["STEP_parent"] = parent_uuid
-            obj["STEP_uuid"] = self_uuid
-            obj["STEP_file"] = filepath
-            obj["STEP_name"] = name
-            obj["STEP_tree_location"] = node_index
-            created_uuid[self_uuid] = obj
+        )
+        wm.progress_update(i)
 
     # assert len(created_objs) == len(shapes_labels)
     print("\n" + repr(step_reader.import_problems))
@@ -282,74 +110,16 @@ def load_step(
     for tobj in created_objs:
         obj_unlink_all(tobj)
 
-    # build flat collection
-    if hierarchy_flat:
-        flat_collection = bpy.data.collections.new(filename + ".flat")
-        bpy.context.scene.collection.children.link(flat_collection)
-
-        created_collections = {}
-        for obj in created_objs:
-            group_name = obj["STEP_name"]
-
-            # max collection name len = 61
-            if len(group_name) > 50:
-                group_name = group_name[:25] + "_" + group_name[-25:]
-
-            # TODO: check dupe collections for dupe imports
-            if group_name not in created_collections:
-                group_collection = bpy.data.collections.new(group_name)
-                created_collections[group_name] = group_collection
-                flat_collection.children.link(group_collection)
-            else:
-                group_collection = created_collections[group_name]
-
-            global_t = tree.nodes[obj["STEP_tree_location"]].global_transform
-            set_obj_matrix_world(obj, global_t)
-            group_collection.objects.link(obj)
-
-    # build tree of collections
-    if hierarchy_tree:
-        tree_collection = bpy.data.collections.new(filename + ".hierarchy")
-        bpy.context.scene.collection.children.link(tree_collection)
-        hierarchy_collections = {}
-        hierarchy_collections[-1] = tree_collection
-
-        def node_parse(node, level, parent_collection):
-            # if "name" in node and node["children"] is not None:
-            if len(node.children) > 0:
-                collection_node = bpy.data.collections.new(node.name)
-                assert node.index not in hierarchy_collections
-                hierarchy_collections[node.index] = collection_node
-
-                parent_collection.children.link(collection_node)
-                for c in node.children:
-                    node_parse(tree.nodes[c], level + 1, collection_node)
-
-        root = tree.nodes[0]
-        if len(root.children) > 0:
-            for c in root.children:
-                node_parse(tree.nodes[c], 0, tree_collection)
-
-            # link objects to tree
-            if len(hierarchy_collections.items()) > 0:
-                for obj in created_objs:
-                    hierarchy_collections[obj["STEP_parent"]].objects.link(obj)
-                    global_t = tree.nodes[obj["STEP_tree_location"]].global_transform
-                    set_obj_matrix_world(obj, global_t)
-
-    # build hierarchy with empties
-    if hierarchy_empties:
-        for obj in created_objs:
-            global_t = tree.nodes[obj["STEP_tree_location"]].global_transform
-            set_obj_matrix_world(obj, global_t)
-            bpy.context.scene.collection.objects.link(obj)
-
-            # Parent objs
-            parent_id = obj["STEP_parent"]
-            if parent_id in created_uuid:
-                parent = created_uuid[parent_id]
-                obj.parent = parent
-                obj.matrix_parent_inverse = parent.matrix_world.inverted()
+    # build hierarchy
+    build_blender_hierarchy(
+        filename,
+        tree,
+        created_objs,
+        hierarchy_flat,
+        hierarchy_tree,
+        hierarchy_empties,
+        created_uuid,
+    )
 
     transform_to_up(up_as[0], created_objs, scale)
 
@@ -469,7 +239,7 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
             # ("FLAT_AND_TREE", "Flat and tree collection", "", 0),
         ],
         name="Tree hierarchy",
-        default="EMPTIES",
+        default="TREE",
         description="Organization styles of objects",
     )
 
@@ -627,6 +397,7 @@ class STEP_OT_FixASCII(bpy.types.Operator):
 
     def execute(self, context):
         from pathlib import Path
+
         # import unicodedata
 
         print("Attempting to format STEP file as ASCII")
@@ -698,10 +469,10 @@ class STEP_OT_ReloadSTEP(bpy.types.Operator):
         return context.object is not None and "STEP_file" in context.object
 
     def execute(self, context):
-        from . import importer
+        from . import step_reader
 
         filepath = context.object["STEP_file"]
-        step_reader = importer.ReadSTEP(filepath)
+        step_reader = step_reader.ReadSTEP(filepath)
         global_file_cache[filepath] = step_reader
         return {"FINISHED"}
 

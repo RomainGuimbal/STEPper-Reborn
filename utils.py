@@ -15,6 +15,7 @@
 
 import numpy as np
 import bpy
+from OCP.AIS import AIS_Shape
 
 # ---------------------------------------------------------------------------
 # Color / material helpers
@@ -68,7 +69,6 @@ def add_material(name, color, link_vertex_color=False, overwrite=False):
     # mat.shadow_method = "CLIP"
     # mat.node_tree.nodes["Image Texture"].image = image
     return mat
-
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +202,37 @@ def transform_to_up(up, chosen_objects, scale, to_cursor=True):
 
     # for obj in created_objs:
     #     obj.select_set(True)
+
+
+def shape_size(shp):
+    bb = AIS_Shape(shp).BoundingBox()
+    if bb.IsVoid():
+        return 1.0
+    diag = (bb.CornerMax().Distance(bb.CornerMin())) / 100000
+    return diag
+
+
+def choose_hierarchy_types(htypes):
+    """
+    Return hierarchy types selection from input string
+    """
+    hierarchy_flat = False
+    hierarchy_tree = False
+    hierarchy_empties = False
+
+    if htypes == "FLAT_AND_TREE":
+        hierarchy_flat = True
+        hierarchy_tree = True
+    elif htypes == "TREE":
+        hierarchy_tree = True
+    elif htypes == "FLAT":
+        hierarchy_flat = True
+    elif htypes == "EMPTIES":
+        hierarchy_empties = True
+    else:
+        assert False, "Invalid input parameter"
+
+    return hierarchy_flat, hierarchy_tree, hierarchy_empties
 
 
 # ---------------------------------------------------------------------------

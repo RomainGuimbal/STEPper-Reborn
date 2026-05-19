@@ -14,7 +14,6 @@
 """Mesh building utilities: geometry processing, material creation, timing."""
 
 import numpy as np
-import bmesh
 import bpy
 
 # ---------------------------------------------------------------------------

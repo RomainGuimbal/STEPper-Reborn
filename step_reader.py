@@ -590,7 +590,7 @@ class ReadSTEP:
         Umin = Umax = Vmin = Vmax = None
         for t in range(1, d_nbnodes + 1):
             pt = facing.Node(t)
-            verts.append(b_XYZ(pt))
+            verts.append((pt.X(), pt.Y(), pt.Z()))
 
             uv = facing.UVNode(t)
             u, v = uv.X(), uv.Y()
@@ -623,16 +623,17 @@ class ReadSTEP:
 
             if prop.IsNormalDefined():
                 normal = prop.Normal().Transformed(itform)
-                nn = np.array(b_XYZ(normal))
+                nn = np.array((normal.X(), normal.Y(), normal.Z()), dtype=np.float32)
                 if is_reversed:
                     nn = -nn
             else:
-                nn = np.array((0.0, 0.0, 1.0))
+                nn = np.array((0.0, 0.0, 1.0), dtype=np.float32)
                 undef_normals = True
 
             norms.append(np.float32(nn))
 
         # Build triangulation
+        d_nbtriangles = facing.NbTriangles()
         needs_swap = face.Orientation() != TopAbs_FORWARD
         for t in range(1, d_nbtriangles + 1):
             T1, T2, T3 = tri(t).Get()
@@ -646,7 +647,7 @@ class ReadSTEP:
             self.import_problems["Undefined normals"] += 1
 
         tri_data = [
-            trimesh.TriData(
+            TriData(
                 t,
                 [norms[i] for i in t],
                 [uvs[i] for i in t],

@@ -147,11 +147,3 @@ class StepAnalyzer:
                         self.find_components(ref_comps)
 
         self.indent -= 1
-
-
-if __name__ == "__main__":
-    SA = StepAnalyzer(filename="tests/as1-oc-214.step")
-    print(SA.dump())
-
-#     SA2 = StepAnalyzer(filename="step/as1_pe_203.stp")
-#     print(SA2.dump())

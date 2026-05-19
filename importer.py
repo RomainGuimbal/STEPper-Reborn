@@ -87,12 +87,6 @@ def trsf_matrix(shp):
     return matrix
 
 
-def _test_shape(sh):
-    tmr = trsf_matrix(sh)
-    if np.any(tmr != np.eye(4, dtype=np.float32)[:3, :4]):
-        print(tmr)
-
-
 def force_ascii(i_file):
     from pathlib import Path
 

@@ -5,6 +5,7 @@ def make_tri_hash(f):
     return frozenset([tuple(f[0]), tuple(f[1]), tuple(f[2])])
 
 
+# TODO, replace by contiguous np arrays
 class TriData:
     """Associated data for a single triangle"""
 

@@ -622,12 +622,12 @@ class ReadSTEP:
             )
 
             if prop.IsNormalDefined():
-                normal = prop.Normal().Transformed(itform)
-                nn = np.array((normal.X(), normal.Y(), normal.Z()), dtype=np.float32)
+                normal = prop.Normal().Transformed(itform) # Is already normalized
+                nn = np.array((normal.X(), normal.Y(), normal.Z()))
                 if is_reversed:
                     nn = -nn
             else:
-                nn = np.array((0.0, 0.0, 1.0), dtype=np.float32)
+                nn = np.float32((0.0, 0.0, 1.0))
                 undef_normals = True
 
             norms.append(np.float32(nn))

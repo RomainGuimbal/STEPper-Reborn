@@ -48,34 +48,50 @@ def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
     # the inner range(3) scan with O(1) dict lookups.
     face_vert_norms = [{t.indices[j]: t.norms[j] for j in range(3)} for t in mesh.tris]
 
-    def _project_plane_normalize(plane, vec):
-        prj = vec - (plane * np.dot(plane, vec))
-        prjn = np.linalg.norm(prj)
-        return prj / prjn if prjn != 0.0 else np.array([0.0, 0.0, 1.0])
+    def _project_vector_onto_plane_normalized(plane, vector):
+        projected_vector = vector - (plane * np.dot(plane, vector))
+        projected_norm = np.linalg.norm(projected_vector)
+        return (
+            projected_vector / projected_norm
+            if projected_norm != 0.0
+            else np.array([0.0, 0.0, 1.0], dtype=np.float32)
+        )
 
-    def _prjtest(plane, n0, n1, margin):
-        p0 = _project_plane_normalize(plane, n0)
-        prj = _project_plane_normalize(plane, n1)
-        return np.dot(p0, prj) < 1.0 - margin
+    def _face_normals_disagree_on_edge_plane(plane, normal_a, normal_b, margin):
+        projected_a = _project_vector_onto_plane_normalized(plane, normal_a)
+        projected_b = _project_vector_onto_plane_normalized(plane, normal_b)
+        return np.dot(projected_a, projected_b) < 1.0 - margin
 
-    margin = 0.02
+    sharp_norm_margin = 0.02
     for e in bm.edges:
-        fi = [f.index for f in e.link_faces]
-        if len(fi) != 2:
+        face_indices = [f.index for f in e.link_faces]
+        if len(face_indices) != 2:
             continue
-        fvn0 = face_vert_norms[fi[0]]
-        fvn1 = face_vert_norms[fi[1]]
-        ev0 = e.verts[0].index
-        ev1 = e.verts[1].index
-        n00 = fvn0.get(ev0)
-        n10 = fvn1.get(ev0)
-        n01 = fvn0.get(ev1)
-        n11 = fvn1.get(ev1)
-        if n00 is None or n10 is None or n01 is None or n11 is None:
+
+        norms_face_0 = face_vert_norms[face_indices[0]]
+        norms_face_1 = face_vert_norms[face_indices[1]]
+        vert_index_a = e.verts[0].index
+        vert_index_b = e.verts[1].index
+
+        norm_a_face_0 = norms_face_0.get(vert_index_a)
+        norm_a_face_1 = norms_face_1.get(vert_index_a)
+        norm_b_face_0 = norms_face_0.get(vert_index_b)
+        norm_b_face_1 = norms_face_1.get(vert_index_b)
+        if (
+            norm_a_face_0 is None
+            or norm_a_face_1 is None
+            or norm_b_face_0 is None
+            or norm_b_face_1 is None
+        ):
             e.smooth = True
             continue
-        plane = np.array((e.verts[0].co - e.verts[1].co).normalized())
-        if _prjtest(plane, n00, n10, margin) and _prjtest(plane, n01, n11, margin):
+
+        edge_direction = np.array((e.verts[0].co - e.verts[1].co).normalized())
+        if _face_normals_disagree_on_edge_plane(
+            edge_direction, norm_a_face_0, norm_a_face_1, sharp_norm_margin
+        ) and _face_normals_disagree_on_edge_plane(
+            edge_direction, norm_b_face_0, norm_b_face_1, sharp_norm_margin
+        ):
             e.smooth = False
         else:
             e.smooth = True
@@ -156,5 +172,5 @@ def mesh_from_shape(
         obj["STEP_file"] = filepath
         obj["STEP_name"] = name
         obj["STEP_tree_location"] = node_index
-        created_uuid[self_uuid] = obj    
+        created_uuid[self_uuid] = obj
     return obj

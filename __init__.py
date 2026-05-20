@@ -330,29 +330,30 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
             # row.prop(prg, "fw_as")
 
     def execute(self, context):
-        from viztracer import VizTracer
-        with VizTracer(output_file="/tmp/blender_trace.json") as tracer:
-            if context.mode != "OBJECT":
-                bpy.ops.object.mode_set(mode="OBJECT")
+        if context.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
 
-            folder = os.path.dirname(self.filepath)
+        folder = os.path.dirname(self.filepath)
 
-            # print(type(self.files))
-            # print(dir(self.files))
-            l_def, a_def = self.lin_deflection * 2000, self.ang_deflection
-            if bpy.context.scene.stepper.simpler_parameters:
-                a_def, l_def = calculate_detail_level(self.detail_level)
+        # print(type(self.files))
+        # print(dir(self.files))
+        l_def, a_def = self.lin_deflection * 2000, self.ang_deflection
+        if bpy.context.scene.stepper.simpler_parameters:
+            a_def, l_def = calculate_detail_level(self.detail_level)
 
-            import_files = [i.name for i in self.files]
+        import_files = [i.name for i in self.files]
 
-            if self.override_file != "":
-                import_files = [self.override_file]
+        if self.override_file != "":
+            import_files = [self.override_file]
 
-            # iterate through the selected files
-            for _, i in enumerate(import_files):
-                # generate full path to file
-                path_to_file = os.path.join(folder, i)
-                print("Opening file:", path_to_file)
+        # iterate through the selected files
+        for _, i in enumerate(import_files):
+            # generate full path to file
+            path_to_file = os.path.join(folder, i)
+            print("Opening file:", path_to_file)
+
+            from viztracer import VizTracer
+            with VizTracer(output_file="/tmp/blender_trace.json") as tracer:
                 result = load_step(
                     context,
                     path_to_file,

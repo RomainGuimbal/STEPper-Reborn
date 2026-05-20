@@ -29,7 +29,7 @@ from .utils import (
     transform_to_up,
     choose_hierarchy_types,
 )
-from .build_mesh import build_mesh, mesh_from_shape
+from .build_mesh import build_mesh, bl_obj_from_occ_shape
 from .build_blender_hierarchy import build_blender_hierarchy
 
 global_file_cache = {}
@@ -85,7 +85,7 @@ def load_step(
 
     wm.progress_begin(0, total)
     for i, (shp, node_index) in enumerate(all_shapes):
-        obj = mesh_from_shape(
+        obj = bl_obj_from_occ_shape(
             step_reader,
             shp,
             tree,
@@ -332,6 +332,9 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
     def execute(self, context):
         from viztracer import VizTracer
         with VizTracer(output_file="/tmp/blender_trace.json") as tracer:
+            if context.mode != "OBJECT":
+                bpy.ops.object.mode_set(mode="OBJECT")
+
             folder = os.path.dirname(self.filepath)
 
             # print(type(self.files))
@@ -487,6 +490,10 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
         return context.object is not None and "STEP_file" in context.object
 
     def execute(self, context):
+        prev_mode = bpy.context.mode
+        if prev_mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+
         meshes = {}
         prevname = ""
         curname = ""
@@ -540,7 +547,7 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
                 if tag == sel_tag:
                     rebuilt_meshes.add(sel_tag)
                     print("Rebuilding:", sel_tag, obj.data.name)
-                    build_mesh(step_reader, obj, shp, lin_def, ang_def)
+                    obj.link(build_mesh(step_reader, name, shp, lin_def, ang_def))
                     obj.display_type = "TEXTURED"
                     build_tags.add(obj["STEP_tag"])
                     break
@@ -551,7 +558,9 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
 
         for obj in context.selected_objects:
             obj.display_type = "TEXTURED"
-
+        
+        if prev_mode != "OBJECT":
+            bpy.ops.object.mode_set(mode=prev_mode)
         return {"FINISHED"}
 
 

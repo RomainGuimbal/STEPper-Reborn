@@ -112,18 +112,6 @@ def set_obj_matrix_world(obj, mtx):
             obj.matrix_world[row][col] = mtx[row][col]
 
 
-def create_new_obj_with_mesh(name, set_active=True):
-    """
-    Create new empty object and mesh, link them, and optionally set to active
-    """
-    empty_mesh = bpy.data.meshes.new(name)
-    obj = bpy.data.objects.new(name, empty_mesh)
-    bpy.context.collection.objects.link(obj)
-    if set_active:
-        bpy.context.view_layer.objects.active = obj
-    return obj
-
-
 def choose_hierarchy_types(htypes):
     """
     Return hierarchy types selection from input string
@@ -241,18 +229,13 @@ def choose_hierarchy_types(htypes):
 
 
 def bpy_update_object_data(
-    objdata, bm, vcol_name, colors, uvs, norms, mat_names, build_materials=True
+    objdata, vcol_name, colors, uvs, norms, mat_names, build_materials=True
 ):
     # Flush BMesh (seams, sharp edges) to mesh.  Color and material indices are
     # applied afterwards via the faster mesh-level foreach_set API, which avoids
     # N_tris*3 Python-level BMesh attribute writes.
-    prev_mode = bpy.context.object.mode
-    bpy.ops.object.mode_set(mode="OBJECT")
-    bm.to_mesh(objdata)
     if len(norms) > 0:
         objdata.normals_split_custom_set(np.array(norms))
-    bpy.ops.object.mode_set(mode=prev_mode)
-
     if not colors:
         return
 

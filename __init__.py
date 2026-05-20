@@ -29,7 +29,7 @@ from .utils import (
     transform_to_up,
     choose_hierarchy_types,
 )
-from .build_mesh import build_mesh, mesh_from_shape
+from .build_mesh import build_mesh, bl_obj_from_occ_shape
 from .build_blender_hierarchy import build_blender_hierarchy
 
 global_file_cache = {}
@@ -85,7 +85,7 @@ def load_step(
 
     wm.progress_begin(0, total)
     for i, (shp, node_index) in enumerate(all_shapes):
-        obj = mesh_from_shape(
+        obj = bl_obj_from_occ_shape(
             step_reader,
             shp,
             tree,
@@ -330,27 +330,30 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
             # row.prop(prg, "fw_as")
 
     def execute(self, context):
-        from viztracer import VizTracer
+        if context.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
 
-        with VizTracer(output_file="/tmp/blender_trace.json") as tracer:
-            folder = os.path.dirname(self.filepath)
+        folder = os.path.dirname(self.filepath)
 
-            # print(type(self.files))
-            # print(dir(self.files))
-            l_def, a_def = self.lin_deflection * 2000, self.ang_deflection
-            if bpy.context.scene.stepper.simpler_parameters:
-                a_def, l_def = calculate_detail_level(self.detail_level)
+        # print(type(self.files))
+        # print(dir(self.files))
+        l_def, a_def = self.lin_deflection * 2000, self.ang_deflection
+        if bpy.context.scene.stepper.simpler_parameters:
+            a_def, l_def = calculate_detail_level(self.detail_level)
 
-            import_files = [i.name for i in self.files]
+        import_files = [i.name for i in self.files]
 
-            if self.override_file != "":
-                import_files = [self.override_file]
+        if self.override_file != "":
+            import_files = [self.override_file]
 
-            # iterate through the selected files
-            for _, i in enumerate(import_files):
-                # generate full path to file
-                path_to_file = os.path.join(folder, i)
-                print("Opening file:", path_to_file)
+        # iterate through the selected files
+        for _, i in enumerate(import_files):
+            # generate full path to file
+            path_to_file = os.path.join(folder, i)
+            print("Opening file:", path_to_file)
+
+            from viztracer import VizTracer
+            with VizTracer(output_file="/tmp/blender_trace.json") as tracer:
                 result = load_step(
                     context,
                     path_to_file,
@@ -488,6 +491,10 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
         return context.object is not None and "STEP_file" in context.object
 
     def execute(self, context):
+        prev_mode = bpy.context.mode
+        if prev_mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+
         meshes = {}
         prevname = ""
         curname = ""
@@ -541,7 +548,7 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
                 if tag == sel_tag:
                     rebuilt_meshes.add(sel_tag)
                     print("Rebuilding:", sel_tag, obj.data.name)
-                    build_mesh(step_reader, obj, shp, lin_def, ang_def)
+                    obj.link(build_mesh(step_reader, name, shp, lin_def, ang_def))
                     obj.display_type = "TEXTURED"
                     build_tags.add(obj["STEP_tag"])
                     break
@@ -552,7 +559,9 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
 
         for obj in context.selected_objects:
             obj.display_type = "TEXTURED"
-
+        
+        if prev_mode != "OBJECT":
+            bpy.ops.object.mode_set(mode=prev_mode)
         return {"FINISHED"}
 
 

@@ -5,6 +5,7 @@ def make_tri_hash(f):
     return frozenset([tuple(f[0]), tuple(f[1]), tuple(f[2])])
 
 
+# TODO, replace by contiguous np arrays
 class TriData:
     """Associated data for a single triangle"""
 
@@ -33,10 +34,12 @@ class TriData:
 
 
 class TriMesh:
-    """Triangle mesh. Array of triangles of which each item has three pointers
-    to locations inside array of verts. Each triangle data is defined through TriData class"""
+    """
+    Triangle mesh. Array of triangles of which each item has three pointers
+    to verts. Each triangle data is defined through TriData class
+    """
 
-    def __init__(self, verts=None, tris=None, matrix=None):
+    def __init__(self, verts=None, tris=None, matrix=None, compute_hash=True):
 
         if verts is None and tris is None:
             self.tris = []
@@ -65,9 +68,10 @@ class TriMesh:
                 #     self.tris[i].batch = self.batch_index
 
                 # Create tri hashes for overwrite detection
-                for ti, t in enumerate(self.tris):
-                    h = make_tri_hash([tuple(self.verts[i]) for i in t.indices])
-                    self.tri_hash[h] = ti
+                if compute_hash:
+                    for ti, t in enumerate(self.tris):
+                        h = make_tri_hash([tuple(self.verts[i]) for i in t.indices])
+                        self.tri_hash[h] = ti
             else:
                 self.tris = None
 
@@ -96,7 +100,8 @@ class TriMesh:
 
     def filter_zero_area(self):
         """Remove all tris with zero area.
-        Assumes fuse_verts() has been called so co-located verts share the same index."""
+        Assumes fuse_verts() has been called so co-located verts share the same index.
+        """
         if not self.tris:
             return
         idx = np.array([t.indices for t in self.tris], dtype=np.int32)
@@ -109,7 +114,8 @@ class TriMesh:
 
     def filter_same_face(self):
         """Remove all duplicate tris.
-        Assumes fuse_verts() has been called so co-located verts share the same index."""
+        Assumes fuse_verts() has been called so co-located verts share the same index.
+        """
         if not self.tris:
             return
         idx = np.array([t.indices for t in self.tris], dtype=np.int32)
@@ -141,7 +147,11 @@ class TriMesh:
             old_idx = np.array([t.indices for t in self.tris], dtype=np.int32)  # (N,3)
             new_idx = tri_map_arr[old_idx]  # (N,3) vectorised lookup
             for ti, t in enumerate(self.tris):
-                t.indices = (int(new_idx[ti, 0]), int(new_idx[ti, 1]), int(new_idx[ti, 2]))
+                t.indices = (
+                    int(new_idx[ti, 0]),
+                    int(new_idx[ti, 1]),
+                    int(new_idx[ti, 2]),
+                )
 
         self.verts = new_verts
 
@@ -175,7 +185,9 @@ class TriMesh:
         self.verts += verts
         tri = (vc_s, vc_s + 1, vc_s + 2)
         self.tris.append(TriData(tri, norms, uvs, colors, material, mat_name, batch_id))
-        self.tri_hash[make_tri_hash([tuple(verts[i]) for i in range(3)])] = len(self.tris) - 1
+        self.tri_hash[make_tri_hash([tuple(verts[i]) for i in range(3)])] = (
+            len(self.tris) - 1
+        )
         assert self.verts[self.tris[-1].indices[0]] == verts[0]
         assert self.verts[self.tris[-1].indices[2]] == verts[2]
 
@@ -209,7 +221,9 @@ class TriMesh:
             # later batches overwrite earlier ones
             if batch_priority and (otr.color is not None):
                 overwrite = False
-                if (self.tris[tri].color is not None) and (self.tris[tri].batch < otr.batch):
+                if (self.tris[tri].color is not None) and (
+                    self.tris[tri].batch < otr.batch
+                ):
                     overwrite = True
                 else:
                     overwrite = True
@@ -270,7 +284,10 @@ class TriMesh:
                 for e in bm.edges:
                     f = e.link_faces
                     # TODO: is batch indexing broken?
-                    if len(f) == 2 and self.tris[f[0].index].batch != self.tris[f[1].index].batch:
+                    if (
+                        len(f) == 2
+                        and self.tris[f[0].index].batch != self.tris[f[1].index].batch
+                    ):
                         e.seam = True
                     # if not e.is_manifold:
                     #     e.seam = True
@@ -340,7 +357,9 @@ class TriMesh:
 
                     # Check the dots on plane defined by the edge as normal
                     plane = np.array((e.verts[0].co - e.verts[1].co).normalized())
-                    if _prjtest(plane, e_norms[0], margin) and _prjtest(plane, e_norms[1], margin):
+                    if _prjtest(plane, e_norms[0], margin) and _prjtest(
+                        plane, e_norms[1], margin
+                    ):
                         e.smooth = False
                     else:
                         e.smooth = True
@@ -358,7 +377,7 @@ class TriMesh:
         n = len(self.tris)
         result = np.empty((n * 3, 3), dtype=np.float32)
         for ti, t in enumerate(self.tris):
-            result[ti * 3]     = t.norms[0]
+            result[ti * 3] = t.norms[0]
             result[ti * 3 + 1] = t.norms[1]
             result[ti * 3 + 2] = t.norms[2]
         return result

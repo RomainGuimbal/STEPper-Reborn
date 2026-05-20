@@ -22,9 +22,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 # import trimesh works in dev, but not in deploy
-from . import trimesh
-
-importlib.reload(trimesh)
+from .trimesh import TriMesh, TriData
 
 from OCP.BRep import BRep_Builder, BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Surface
@@ -67,11 +65,6 @@ from OCP.XSControl import XSControl_WorkSession
 
 def b_colorname(col):
     return Quantity_Color.StringName_s(Quantity_Color.Name(col))
-
-
-def b_XYZ(v):
-    x = v.XYZ()
-    return (x.X(), x.Y(), x.Z())
 
 
 def b_RGB(c):
@@ -456,6 +449,7 @@ class ReadSTEP:
         self.face_color_priority = {}
         self.tag_info = {}
         self.skipped_shapes = set([])
+        self.brep_tool = BRep_Tool()
         self.import_problems = {
             "Triangulation": 0,
             "Undefined normals": 0,
@@ -560,8 +554,10 @@ class ReadSTEP:
         tree = _get_shapes()
         self.tree = tree
 
-    def triangulate_face(self, face, tform, color=None, col_name=None, batch=None):
-        bt = BRep_Tool()
+    def triangulate_face(
+        self, face, tform, color=None, col_name=None, batch=None
+    ) -> TriMesh:
+        bt = self.brep_tool
         location = TopLoc_Location()
         facing = bt.Triangulation_s(face, location)
         if facing is None:
@@ -594,7 +590,7 @@ class ReadSTEP:
         Umin = Umax = Vmin = Vmax = None
         for t in range(1, d_nbnodes + 1):
             pt = facing.Node(t)
-            verts.append(b_XYZ(pt))
+            verts.append((pt.X(), pt.Y(), pt.Z()))
 
             uv = facing.UVNode(t)
             u, v = uv.X(), uv.Y()
@@ -626,22 +622,23 @@ class ReadSTEP:
             )
 
             if prop.IsNormalDefined():
-                normal = prop.Normal().Transformed(itform)
-                nn = np.array(b_XYZ(normal))
+                normal = prop.Normal().Transformed(itform) # Is already normalized
+                nn = np.array((normal.X(), normal.Y(), normal.Z()))
                 if is_reversed:
                     nn = -nn
             else:
-                nn = np.array((0.0, 0.0, 1.0))
+                nn = np.float32((0.0, 0.0, 1.0))
                 undef_normals = True
 
             norms.append(np.float32(nn))
 
         # Build triangulation
         d_nbtriangles = facing.NbTriangles()
+        needs_swap = face.Orientation() != TopAbs_FORWARD
         for t in range(1, d_nbtriangles + 1):
             T1, T2, T3 = tri(t).Get()
 
-            if face.Orientation() != TopAbs_FORWARD:
+            if needs_swap:
                 T1, T2 = T2, T1
 
             tris.append((T1 - 1, T2 - 1, T3 - 1))
@@ -650,7 +647,7 @@ class ReadSTEP:
             self.import_problems["Undefined normals"] += 1
 
         tri_data = [
-            trimesh.TriData(
+            TriData(
                 t,
                 [norms[i] for i in t],
                 [uvs[i] for i in t],
@@ -662,10 +659,11 @@ class ReadSTEP:
             for t in tris
         ]
 
-        return trimesh.TriMesh(verts=verts, tris=tri_data)
+        # Keep verts/norms/uvs as numpy arrays; convert_hash=False since not needed in main pipeline
+        return TriMesh(verts=verts, tris=tri_data, compute_hash=False)
 
     def build_trimesh(self, shape, lin_def=0.8, ang_def=0.5, hacks=set([])):
-        out_mesh = trimesh.TriMesh()
+        out_mesh = TriMesh()
         out_mesh.matrix = np.eye(4, dtype=np.float32)
 
         # TODO: this is hack
@@ -715,24 +713,24 @@ class ReadSTEP:
                 exc = ex.Current()
                 face = TopoDS.Face_s(exc)
 
-                mesh = self.triangulate_face(
+                face_mesh = self.triangulate_face(
                     face,
                     trf,
                     color=col_rgb if col is not None else None,
                     col_name=col_name if col is not None else None,
                     batch=batch,
                 )
-                if mesh:
+                if face_mesh:
                     # First filter in overwriting a face/color
-                    face_data[face] = (0, mesh, "EMPTY")
+                    face_data[face] = (0, face_mesh, "EMPTY")
 
                 ex.Next()
                 batch += 1
 
         for _, b in face_data.items():
-            _, mesh, col_name = b
-            if len(mesh.verts) > 0:
-                out_mesh.add_mesh(mesh)
+            _, face_mesh, col_name = b
+            if len(face_mesh.verts) > 0:
+                out_mesh.add_mesh(face_mesh)
 
         print("[l]", end="", flush=True)
 

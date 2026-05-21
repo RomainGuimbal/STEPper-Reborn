@@ -103,15 +103,15 @@ def load_step(
     instanced_shapes = []
     empties = []
     for t in all_tt_tags:
-        if t in unique_tt_tags:
-            shp = shp_dict.get(t)
-            if shp[0]:  # is not empty shape
+        shp = shp_dict.get(t)
+        if shp[0]:
+            if t in unique_tt_tags:
                 instanced_shapes.append(shp)
-            else:  # is empty shape
-                empties.append(shp[1])  # append just the index
-        else:
-            unique_shapes.append(shp_dict[t])
-            unique_tt_tags.add(t)
+            else:
+                unique_shapes.append(shp)
+                unique_tt_tags.add(t)
+        else:  # is empty shape
+            empties.append(shp[1])  # append just the index
 
     # Rename roots
     rename = lambda name: name if name != "root" else filename + ".empties"

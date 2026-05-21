@@ -100,7 +100,7 @@ def load_step(
     shp_dict = dict(zip(all_tt_tags, all_shapes))
     unique_tt_tags_set = set()  # alleged as 5000x faster for lookup
     unique_tt_tags = []  # kind of forced to have both to preserve order
-    unique_shapes = []
+    unique_shapes_tp = [] # shape tuples
     instanced_shapes = []
     empties = []
     for t in all_tt_tags:
@@ -109,26 +109,28 @@ def load_step(
             if t in unique_tt_tags_set:
                 instanced_shapes.append(shp)
             else:
-                unique_shapes.append(shp)
+                unique_shapes_tp.append(shp)
                 unique_tt_tags_set.add(t)
                 unique_tt_tags.append(t)
         else:  # is empty shape
             empties.append(shp[1])  # append just the index
 
+    unique_shapes = [s for s,_ in unique_shapes_tp]
+
     # Rename roots
     rename = lambda name: name if name != "root" else filename + ".empties"
-    names_of_unique = [tree.nodes[node_index].name for _, node_index in unique_shapes]
+    names_of_unique = [tree.nodes[node_index].name for _, node_index in unique_shapes_tp]
     names_of_instances = [
         tree.nodes[node_index].name for _, node_index in instanced_shapes
     ]
     names_of_empties = [rename(tree.nodes[node_index].name) for node_index in empties]
 
     # Other params
-    sub_shapes_of_shapes = [step_reader.sub_shapes[shape] for shape, _ in unique_shapes]
-    shape_colors = [step_reader.face_colors[shape] for shape, _ in unique_shapes]
+    sub_shapes_of_shapes = [step_reader.sub_shapes[shape] for shape in unique_shapes]
+    shape_colors = [step_reader.face_colors[shape] for shape in unique_shapes]
     sub_shapes_colors = [
         [step_reader.face_colors[sub_shp] for sub_shp in sub_shapes_of_shapes[i]]
-        for i in range(len(unique_shapes))
+        for i in range(len(unique_shapes_tp))
     ]
 
     # TODO flatten subshapes and shapes in a single list (/!\ and preserve instancing)
@@ -151,7 +153,7 @@ def load_step(
 
     # Create objects with mesh
     wm.progress_begin(0, total)
-    for i, (shp, node_index) in enumerate(unique_shapes):
+    for i, (shp, node_index) in enumerate(unique_shapes_tp):
         obj = bl_obj_from_mesh_shape(
             objsdata[i],
             shp,

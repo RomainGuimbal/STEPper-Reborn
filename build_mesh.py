@@ -1,6 +1,7 @@
 import bpy
 import bmesh
 import numpy as np
+from OCP import TopAbs
 from .trimesh import TriMesh
 from .utils import bpy_update_object_data
 from .step_reader import build_trimesh
@@ -107,7 +108,7 @@ def mark_edges(objdata, trimesh: TriMesh):
 def build_shape_mesh(
     name,
     shape,
-    sub_shapes_of_shape: list,
+    sub_shapes_of_shape: list[TopAbs.TopAbs_SHAPE],
     shape_color,
     sub_shapes_colors: list,
     lind=0.8,
@@ -115,7 +116,7 @@ def build_shape_mesh(
     vert_color_name="Colors",
 ) -> bpy.types.Mesh:
     
-    trimesh: TriMesh = build_trimesh(
+    trimesh, empty_shape_count = build_trimesh(
         shape,
         sub_shapes_of_shape,
         shape_color,

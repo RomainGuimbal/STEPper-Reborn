@@ -200,29 +200,6 @@ def shape_size(shp):
     return diag
 
 
-def choose_hierarchy_types(htypes):
-    """
-    Return hierarchy types selection from input string
-    """
-    hierarchy_flat = False
-    hierarchy_tree = False
-    hierarchy_empties = False
-
-    if htypes == "FLAT_AND_TREE":
-        hierarchy_flat = True
-        hierarchy_tree = True
-    elif htypes == "TREE":
-        hierarchy_tree = True
-    elif htypes == "FLAT":
-        hierarchy_flat = True
-    elif htypes == "EMPTIES":
-        hierarchy_empties = True
-    else:
-        assert False, "Invalid input parameter"
-
-    return hierarchy_flat, hierarchy_tree, hierarchy_empties
-
-
 # ---------------------------------------------------------------------------
 # bmesh / vertex-color mesh update (TriMesh path)
 # ---------------------------------------------------------------------------

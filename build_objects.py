@@ -1,11 +1,20 @@
 import bpy
 import bmesh
+import time
+import ntpath
 import numpy as np
 from OCP import TopAbs
 from .trimesh import TriMesh
 from .utils import bpy_update_object_data
 from .step_reader import build_trimesh
-
+from .utils import (
+    obj_unlink_all,
+    transform_to_up,
+    choose_hierarchy_types,
+)
+from multiprocessing import Pool
+from functools import partial
+from .build_blender_hierarchy import build_blender_hierarchy
 
 def is_vert_sharp_vectorized(edge_dirs, norms_a, norms_b, margin_sq):
     dot_ab = np.einsum("ij,ij->i", norms_a, norms_b)
@@ -239,3 +248,173 @@ def bl_hierarchy_empties(node, name, filepath, node_index, created_uuid):
     created_uuid[self_uuid] = obj
 
     return obj
+
+
+
+def load_step(
+    context,
+    filepath,
+    step_reader,
+    custom_scale=None,
+    lin_deflection=0.8,
+    ang_deflection=0.5,
+    # merge_distance=0.001,
+    up_as="Y",
+    htypes="TREE",
+):
+    hierarchy_flat, hierarchy_tree, hierarchy_empties = choose_hierarchy_types(htypes)
+
+    filename = "".join(ntpath.basename(filepath).split(".")[:-1])
+
+    tree = step_reader.tree
+    scale = step_reader.scale
+    if custom_scale is not None:
+        scale = custom_scale
+
+    # divide by Blender unit length
+    scale /= context.scene.unit_settings.scale_length
+    print("Current Blender scale set at:", context.scene.unit_settings.scale_length)
+
+    wm = bpy.context.window_manager
+    wm.progress_begin(0, total)
+
+    created_objs = []
+    created_names = {}
+    created_uuid = {}
+
+    # traverse shapes, render in "face" mode
+    start_time = time.time()
+    all_shapes = tree.get_shapes()
+    total = len(all_shapes)
+
+    # Generate meshes
+
+    # Gather parameters
+    # Split shapes depending unique or not
+    all_tt_tags = [
+        "tt_" + repr(tree.nodes[node_index].tag) for _, node_index in all_shapes
+    ]
+    shp_dict = dict(zip(all_tt_tags, all_shapes))
+    unique_tt_tags_set = set()  # alleged as 5000x faster for lookup
+    unique_tt_tags = []  # kind of forced to have both to preserve order
+    unique_shapes_tp = [] # shape tuples
+    instanced_shapes = []
+    empties = []
+    for t in all_tt_tags:
+        shp = shp_dict.get(t)
+        if shp[0]:
+            if t in unique_tt_tags_set:
+                instanced_shapes.append(shp)
+            else:
+                unique_shapes_tp.append(shp)
+                unique_tt_tags_set.add(t)
+                unique_tt_tags.append(t)
+        else:  # is empty shape
+            empties.append(shp[1])  # append just the index
+
+    unique_shapes = [s for s,_ in unique_shapes_tp]
+
+    # Rename roots
+    rename = lambda name: name if name != "root" else filename + ".empties"
+    names_of_unique = [tree.nodes[node_index].name for _, node_index in unique_shapes_tp]
+    names_of_instances = [
+        tree.nodes[node_index].name for _, node_index in instanced_shapes
+    ]
+    names_of_empties = [rename(tree.nodes[node_index].name) for node_index in empties]
+
+    # Other params
+    sub_shapes_of_shapes = [step_reader.sub_shapes[shape] for shape in unique_shapes]
+    shape_colors = [step_reader.face_colors[shape] for shape in unique_shapes]
+    sub_shapes_colors = [
+        [step_reader.face_colors[sub_shp] for sub_shp in sub_shapes_of_shapes[i]]
+        for i in range(len(unique_shapes_tp))
+    ]
+
+    # TODO flatten subshapes and shapes in a single list (/!\ and preserve instancing)
+    args = zip(
+        names_of_unique,
+        unique_shapes,
+        sub_shapes_of_shapes,
+        shape_colors,
+        sub_shapes_colors,
+    )
+
+    # Deflections are fixed for all tasks
+    worker = partial(build_shape_mesh, lind=lin_deflection, angd=ang_deflection)
+    # # Exectute meshing
+    # with Pool(4) as pool:
+    #     objsdata = pool.map(worker, args)
+
+    # Multiprocess fails for the moment, use that instead
+    objsdata = [worker(*a) for a in args]
+
+    # Create objects with mesh
+    for i, (shp, node_index) in enumerate(unique_shapes_tp):
+        obj = bl_obj_from_mesh_shape(
+            objsdata[i],
+            shp,
+            tree.nodes[node_index],
+            names_of_unique[i],
+            filepath,
+            node_index,
+            created_uuid,
+            total,
+            i,
+        )
+        created_objs.append(obj)
+        created_names[unique_tt_tags[i]] = obj
+        wm.progress_update(i)
+
+    # Create instanced objects
+    for i, (shp, node_index) in enumerate(instanced_shapes):
+        created_objs.append(
+            bl_obj_from_instance_shape(
+                shp,
+                tree.nodes[node_index],
+                names_of_instances[i],
+                filepath,
+                node_index,
+                created_uuid,
+                created_names,
+                total,
+                i,
+            )
+        )
+
+    # Create empties objects
+    if hierarchy_empties:
+        for i, node_index in enumerate(empties):
+            created_objs.append(
+                bl_hierarchy_empties(
+                    tree.nodes[node_index],
+                    names_of_empties[i],
+                    filepath,
+                    node_index,
+                    created_uuid,
+                )
+            )
+
+    # assert len(created_objs) == len(shapes_labels)
+    print("\n" + repr(step_reader.import_problems))
+
+    # remove all temporary links (for RAM ?)
+    for tobj in created_objs:
+        obj_unlink_all(tobj)
+
+    # build hierarchy
+    build_blender_hierarchy(
+        filename,
+        tree,
+        created_objs,
+        hierarchy_flat,
+        hierarchy_tree,
+        hierarchy_empties,
+        created_uuid,
+    )
+
+    transform_to_up(up_as[0], created_objs, scale)
+
+    wm.progress_end()
+    print(f"STEP loading time elapsed: {time.time()-start_time:.2f}")
+
+    return True

@@ -275,9 +275,6 @@ def load_step(
     scale /= context.scene.unit_settings.scale_length
     print("Current Blender scale set at:", context.scene.unit_settings.scale_length)
 
-    wm = bpy.context.window_manager
-    wm.progress_begin(0, total)
-
     created_objs = []
     created_names = {}
     created_uuid = {}
@@ -287,9 +284,13 @@ def load_step(
     all_shapes = tree.get_shapes()
     total = len(all_shapes)
 
+    wm = bpy.context.window_manager
+    wm.progress_begin(0, total)
+
     # Generate meshes
 
     # Gather parameters
+    print("Gathering parameters for mesh generation")
     # Split shapes depending unique or not
     all_tt_tags = [
         "tt_" + repr(tree.nodes[node_index].tag) for _, node_index in all_shapes
@@ -345,6 +346,7 @@ def load_step(
     # with Pool(4) as pool:
     #     objsdata = pool.map(worker, args)
 
+    print("Mesh generation")
     # Multiprocess fails for the moment, use that instead
     objsdata = [worker(*a) for a in args]
 

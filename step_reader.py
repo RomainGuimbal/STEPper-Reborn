@@ -763,322 +763,6 @@ class ReadSTEP:
 #
 #
 #####################################
-def transfer_with_units(filename)-> tuple[float, TDocStd_Document]:
-    print("Init transfer with units")
-
-    # Init new doc and reader
-    doc = TDocStd_Document(TCollection_ExtendedString("STEP"))
-    step_reader = STEPCAFControl_Reader()
-    step_reader.SetColorMode(True)
-    step_reader.SetNameMode(True)
-    step_reader.SetMatMode(True)
-    step_reader.SetLayerMode(True)
-
-    # Read simple STEP file for correct units
-    session = XSControl_WorkSession()
-    step_simple_reader = STEPControl_Reader(session)
-
-    print("DataExchange: Reading STEP")
-
-    status = step_simple_reader.ReadFile(filename)
-    if status != IFSelect_RetDone:
-        raise AssertionError("Error: can't read file. File possibly damaged.")
-
-    print("STEP read into memory")
-
-    # https://dev.opencascade.org/content/loading-step-file-crashes-edgeloop
-    # Default is 1, try also 0
-    # Interface_Static.SetVal("read.surfacecurve.mode", 3)
-
-    # read units
-    ulen_names = TColStd_SequenceOfAsciiString()
-    uang_names = TColStd_SequenceOfAsciiString()
-    usld_names = TColStd_SequenceOfAsciiString()
-    step_simple_reader.FileUnits(ulen_names, uang_names, usld_names)
-
-    # Info about unit conversions
-    # https://dev.opencascade.org/content/step-unit-conversion-and-meshing
-
-    # for i in range(ulen_names.Length()):
-    #     ulen = ulen_names.Value(i + 1)
-    #     uang = uang_names.Value(i + 1)
-    #     usld = usld_names.Value(i + 1)
-    #     print(ulen.ToCString(), uang.ToCString(), usld.ToCString())
-
-    # default is MM
-    scale = 0.001
-
-    if ulen_names.Length() > 0:
-        scaleval = ulen_names.Value(1).ToCString().lower()
-
-        # INCH, MM, FT, MI, M, KM, MIL, CM
-        # UM, UIN ??
-
-        scales = {
-            "millimeter": 0.001,
-            "millimetre": 0.001,
-            "centimeter": 0.01,
-            "centimetre": 0.01,
-            "kilometer": 1000.0,
-            "kilometre": 1000.0,
-            "meter": 1.0,
-            "metre": 1.0,
-            "inch": 0.0254,
-            "foot": 0.3048,
-            "mile": 1609.34,
-            "mil": 0.0254 * 0.001,
-        }
-
-        if scaleval in scales:
-            scale = scales[scaleval]
-        else:
-            print("ERROR: Undefined scale:", scaleval)
-
-        print("Scale from file (meters per unit):", scaleval, scale)
-
-    else:
-        print("Using default scale (millimeters)")
-
-
-    status = step_reader.ReadFile(filename)
-    assert status == IFSelect_RetDone
-
-    print("DataExchange: Transferring")
-    # print("Roots:", step_reader.NbRootsForTransfer())
-    transfer_result = step_reader.Transfer(doc)
-    if not transfer_result:
-        print("Dataexchange transfer FAILED.")
-    else:
-        print("DataExchange: Transfer done")
-
-    return scale, doc
-
-
-
-# class StepReader:
-
-def init_reader(filename):
-    reader_info = {}
-
-    if not os.path.isfile(filename):
-        raise FileNotFoundError("%s not found." % filename)
-
-    # self.filename = force_ascii(filename)
-    reader_info["filename"] = filename
-
-    scale, doc = transfer_with_units(filename)
-    # transfer_simple(filename)
-
-    reader_info["scale"] = scale
-    reader_info["shape_tool"] = XCAFDoc_DocumentTool.ShapeTool_s(doc.Main())
-    reader_info["color_tool"] = XCAFDoc_DocumentTool.ColorTool_s(doc.Main())
-
-    # material_tool = XCAFDoc_DocumentTool_MaterialTool(doc.Main())
-    # layer_tool = XCAFDoc_DocumentTool_LayerTool(doc.Main())
-
-    # use OrderedDict and make sure the order is maintained through the entire pipeline
-
-    reader_info["shape_label"] = {}
-    reader_info["sub_shapes"] = OrderedDict()
-    reader_info["face_colors"] = {}
-    reader_info["face_color_priority"] = {}
-    reader_info["tag_info"] = {}
-    reader_info["skipped_shapes"] = set([])
-    reader_info["brep_tool"] = BRep_Tool()
-    return reader_info
-
-
-def read_step(filename):
-    """Returns list of tuples (topods_shape, label, color)
-    Use OCAF.
-    """
-
-    reader_info = init_reader(filename)
-
-    # output_shapes = {}
-    # outliers = defaultdict(set)
-
-    def _cprio(lab, shape):
-        "Get label color"
-        tc, ctype, ok = self.query_color(lab)
-        self.face_colors[shape] = tc if ok else None
-        if ok:
-            return ctype
-        else:
-            return 0
-
-    def _get_sub_shapes(lab, level, tree, leaf_id):
-
-        # print(" " * (2 * level) + get_label_name(lab))
-        master_leaf = tree.nodes[leaf_id]
-        # l_comps = TDF_LabelSequence()
-        # self.shape_tool.GetComponents_s(lab, l_comps)
-        if self.shape_tool.IsAssembly_s(lab):
-            # Get transform for pure transform (empty)
-            # Empty has eye transform, inherit global from parent
-
-            # empty = tree.add(leaf.index, lab, empty=True)
-            # output_shapes[shape] = empty
-
-            # Read contained shapes
-            l_c = TDF_LabelSequence()
-            self.shape_tool.GetComponents_s(lab, l_c)
-            for i in range(l_c.Length()):
-                label = l_c.Value(i + 1)
-                if self.shape_tool.IsReference_s(label):
-                    label_reference = TDF_Label()
-                    self.shape_tool.GetReferredShape_s(label, label_reference)
-
-                    label_transform = self.label_matrix(label)
-                    node = tree.add(master_leaf.index, label_reference)
-                    new_leaf = tree.nodes[node.index]
-                    new_leaf.local_transform = label_transform
-                    new_leaf.global_transform = (
-                        master_leaf.global_transform @ label_transform
-                    )
-
-                    _get_sub_shapes(label_reference, level + 1, tree, node.index)
-                else:
-                    # TODO: process rest of the data
-                    pass
-
-        elif self.shape_tool.IsSimpleShape_s(lab):
-            # TODO: self.shape_label stops being unique when shapes aren't transformed
-            shape = self.shape_tool.GetShape_s(lab)
-            master_leaf.set_shape(shape)
-            if shape in self.shape_label:
-                # Shape already in
-                return
-
-            self.shape_label[shape] = lab
-
-            self.face_color_priority[shape] = _cprio(lab, shape)
-
-            l_subss = TDF_LabelSequence()
-            self.shape_tool.GetSubShapes_s(lab, l_subss)
-            self.sub_shapes[shape] = []
-            for i in range(l_subss.Length()):
-                lab_subs = l_subss.Value(i + 1)
-                shape_sub = self.shape_tool.GetShape_s(lab_subs)
-                self.shape_label[shape_sub] = lab_subs
-                self.sub_shapes[shape].append(shape_sub)
-                self.face_color_priority[shape_sub] = _cprio(lab_subs, shape_sub)
-            # Color priority is the same as CAD assistant material tree display
-        else:
-            print("DataExchange error: Item is neither assembly or a simple shape")
-
-    def _get_shapes():
-        # self.shape_tool.UpdateAssemblies()
-
-        labels = TDF_LabelSequence()
-        self.shape_tool.GetFreeShapes(labels)
-
-        tree = ShapeTree()
-        for i in range(labels.Length()):
-            print(f"DataExchange: Reading shape ({i + 1}/{labels.Length()})")
-
-            root_item = labels.Value(i + 1)
-            node = tree.add(tree.get_root_id(), root_item)
-            _get_sub_shapes(root_item, 0, tree, node.index)
-
-        return tree
-
-    tree = _get_shapes()
-    self.tree = tree
-
-    def query_color(self, label, overwrite=False):
-        # default color = pink
-        c = Quantity_Color(1.0, 0.0, 1.0, Quantity_TOC_RGB)
-        colorset = False
-        colortype = None
-
-        shape = self.shape_tool.GetShape_s(label)
-
-        c_gen = self.color_tool.GetColor(shape, XCAFDoc_ColorGen, c)
-        c_surf = self.color_tool.GetColor(shape, XCAFDoc_ColorSurf, c)
-        c_curv = self.color_tool.GetColor(shape, XCAFDoc_ColorCurv, c)
-        if c_gen or c_surf or c_curv:
-            colorset = True
-            colortype = c_gen * 1 + c_surf * 2 + c_curv * 3
-
-        return c, colortype, colorset
-
-    def print_all_colors(self):
-        tcol = Quantity_Color(1.0, 0.0, 1.0, Quantity_TOC_RGB)
-        clabs = TDF_LabelSequence()
-        self.color_tool.GetColors(clabs)
-        for i in range(clabs.Length()):
-            res = self.color_tool.GetColor(clabs.Value(i + 1), tcol)
-            if res:
-                print(b_colorname(tcol))
-
-    def label_matrix(self, lab):
-        trsf = self.shape_tool.GetLocation_s(lab).Transformation()
-        matrix = np.eye(4, dtype=np.float32)
-        for row in range(1, 4):
-            for col in range(1, 5):
-                matrix[row - 1, col - 1] = trsf.Value(row, col)
-        # print(matrix)
-        return matrix
-
-    def explore_shape(self, shp):
-        return (
-            self.explore_partial(shp, TopAbs_COMPOUND),
-            self.explore_partial(shp, TopAbs_SOLID),
-            self.explore_partial(shp, TopAbs_SHELL),
-            self.explore_partial(shp, TopAbs_FACE),
-            self.explore_partial(shp, TopAbs_WIRE),
-            self.explore_partial(shp, TopAbs_EDGE),
-            self.explore_partial(shp, TopAbs_VERTEX),
-        )
-
-    def shape_info(self, shp):
-        st = self.shape_tool
-        lab = self.shape_label[shp]
-        vals = (
-            st.IsAssembly_s(lab),
-            st.IsFree_s(lab),
-            st.IsShape_s(lab),
-            st.IsCompound_s(lab),
-            st.IsComponent_s(lab),
-            st.IsSimpleShape_s(lab),
-            shp.Locked(),
-        )
-
-        lookup = ["A", "F", "S", "C", "T", "s", "L"]
-        res = "".join([lookup[i] for i, v in enumerate(vals) if v])
-
-        # res += f", C:{shp.NbChildren()}"
-
-        res += ", C:{} So:{} Sh:{} F:{} Wi:{} E:{} V:{}".format(
-            *self.explore_shape(shp)
-        )
-
-        return " " + res + " "
-
-    def transfer_simple(self, fname):
-        # see stepanalyzer.py for license details
-        print("Init simple transfer")
-
-        # Create the application, empty document and shape_tool
-        doc = TDocStd_Document(TCollection_ExtendedString("STEP"))
-        app = XCAFApp_Application.GetApplication()
-        app.NewDocument("MDTV-XCAF", doc)
-
-        # Read file and return populated doc
-        step_reader = STEPCAFControl_Reader()
-        step_reader.SetColorMode(True)
-        step_reader.SetLayerMode(True)
-        step_reader.SetNameMode(True)
-        step_reader.SetMatMode(True)
-        status = step_reader.ReadFile(fname)
-        if status == IFSelect_RetDone:
-            step_reader.Transfer(doc)
-        self.scale = 0.001
-
-        self.doc = doc
-
-
 def explore_partial(shp, te_type):
     c_set = set([])
     ex = TopExp_Explorer(shp, te_type)
@@ -1092,16 +776,16 @@ def explore_partial(shp, te_type):
 
 
 def triangulate_face(
-    face, tform, brep_tool, color=None, col_name=None, batch=None
+    topods_face, tform, brep_tool, color=None, col_name=None, batch=None
 ) -> TriMesh:
     location = TopLoc_Location()
-    facing = brep_tool.Triangulation_s(face, location)
+    facing = brep_tool.Triangulation_s(topods_face, location)
     if facing is None:
         # Mesh error, no triangulation found for part
         # self.import_problems["Triangulation"] += 1
         return None
 
-    surface = BRepAdaptor_Surface(face)
+    surface = BRepAdaptor_Surface(topods_face)
     prop = BRepLProp_SLProps(surface, 2, gp.Resolution_s())
     # prop = BRepLProp_SLProps(surface, 2, 1e-4)
 
@@ -1113,7 +797,7 @@ def triangulate_face(
     uvs = []
 
     undef_normals = False
-    is_reversed = face.Orientation() == TopAbs_REVERSED
+    is_reversed = topods_face.Orientation() == TopAbs_REVERSED
 
     itform = tform.Inverted()
 
@@ -1169,7 +853,7 @@ def triangulate_face(
 
     # Build triangulation
     d_nbtriangles = facing.NbTriangles()
-    needs_swap = face.Orientation() != TopAbs_FORWARD
+    needs_swap = topods_face.Orientation() != TopAbs_FORWARD
     for t in range(1, d_nbtriangles + 1):
         T1, T2, T3 = tri(t).Get()
 
@@ -1199,7 +883,15 @@ def triangulate_face(
     return TriMesh(verts=verts, tris=tri_data, compute_hash=False)
 
 
-def build_trimesh(shape, sub_shapes_of_shape, shape_color, sub_shapes_colors, lin_def=0.8, ang_def=0.5, skip_zero_solids=False):
+def build_trimesh(
+    shape,
+    sub_shapes_of_shape,
+    shape_color,
+    sub_shapes_colors,
+    lin_def=0.8,
+    ang_def=0.5,
+    skip_zero_solids=False,
+):
     out_mesh = TriMesh()
     out_mesh.matrix = np.eye(4, dtype=np.float32)
 

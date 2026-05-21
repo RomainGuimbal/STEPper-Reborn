@@ -107,17 +107,14 @@ def mark_edges(objdata, trimesh: TriMesh):
 def build_shape_mesh(
     name,
     shape,
-    sub_shapes_of_shape,
+    sub_shapes_of_shape: list,
     shape_color,
-    sub_shapes_colors,
-    lind,
-    angd,
-    vcol_name="Colors",
-):
-    hacks = set([])
-    if bpy.context.scene.stepper.hack_skip_zero_solids:
-        hacks.add("skip_zero_solids")
-
+    sub_shapes_colors: list,
+    lind=0.8,
+    angd=0.5,
+    vert_color_name="Colors",
+) -> bpy.types.Mesh:
+    
     trimesh: TriMesh = build_trimesh(
         shape,
         sub_shapes_of_shape,
@@ -125,7 +122,7 @@ def build_shape_mesh(
         sub_shapes_colors,
         lin_def=lind,
         ang_def=angd,
-        hacks=hacks,
+        skip_zero_solids=bpy.context.scene.stepper.hack_skip_zero_solids,
     )
 
     trimesh.fuse_verts()
@@ -144,7 +141,7 @@ def build_shape_mesh(
 
     bpy_update_object_data(
         objdata,
-        vcol_name,
+        vert_color_name,
         trimesh.get_loop_colors(),
         trimesh.get_loop_uvs(),
         trimesh.get_loop_normals(),
@@ -222,13 +219,7 @@ def bl_obj_from_instance_shape(
     return obj
 
 
-def bl_hierarchy_empties(
-    node,
-    name,
-    filepath,
-    node_index,
-    created_uuid
-):
+def bl_hierarchy_empties(node, name, filepath, node_index, created_uuid):
     parent_uuid, self_uuid, tag, name, _, local_t, global_t = node.get_values()
 
     # Create empty

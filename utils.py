@@ -229,7 +229,7 @@ def choose_hierarchy_types(htypes):
 
 
 def bpy_update_object_data(
-    objdata, vcol_name, colors, uvs, norms, mat_names, build_materials=True
+    objdata, vert_color_name, colors, uvs, norms, mat_names, build_materials=True
 ):
     # Flush BMesh (seams, sharp edges) to mesh.  Color and material indices are
     # applied afterwards via the faster mesh-level foreach_set API, which avoids
@@ -280,9 +280,9 @@ def bpy_update_object_data(
 
     # Tile face RGBA to per-loop data and write at C level
     flat_rgba = np.repeat(face_rgba, 3, axis=0).ravel()
-    color_layer = objdata.vertex_colors.get(vcol_name)
+    color_layer = objdata.vertex_colors.get(vert_color_name)
     if color_layer is None:
-        color_layer = objdata.vertex_colors.new(name=vcol_name)
+        color_layer = objdata.vertex_colors.new(name=vert_color_name)
     color_layer.data.foreach_set("color", flat_rgba)
 
     if build_materials:

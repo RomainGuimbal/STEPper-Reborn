@@ -98,18 +98,20 @@ def load_step(
         "tt_" + repr(tree.nodes[node_index].tag) for _, node_index in all_shapes
     ]
     shp_dict = dict(zip(all_tt_tags, all_shapes))
-    unique_tt_tags = set()
+    unique_tt_tags_set = set()  # alleged as 5000x faster for lookup
+    unique_tt_tags = []  # kind of forced to have both to preserve order
     unique_shapes = []
     instanced_shapes = []
     empties = []
     for t in all_tt_tags:
         shp = shp_dict.get(t)
         if shp[0]:
-            if t in unique_tt_tags:
+            if t in unique_tt_tags_set:
                 instanced_shapes.append(shp)
             else:
                 unique_shapes.append(shp)
-                unique_tt_tags.add(t)
+                unique_tt_tags_set.add(t)
+                unique_tt_tags.append(t)
         else:  # is empty shape
             empties.append(shp[1])  # append just the index
 
@@ -122,17 +124,14 @@ def load_step(
     names_of_empties = [rename(tree.nodes[node_index].name) for node_index in empties]
 
     # Other params
-    sub_shapes_of_shapes = [step_reader.sub_shapes[shape] for shape in unique_shapes]
-    shape_colors = [step_reader.face_colors[shape] for shape in unique_shapes]
+    sub_shapes_of_shapes = [step_reader.sub_shapes[shape] for shape, _ in unique_shapes]
+    shape_colors = [step_reader.face_colors[shape] for shape, _ in unique_shapes]
     sub_shapes_colors = [
-        {
-            sub_shp: step_reader.face_colors[sub_shp]
-            for sub_shp in sub_shapes_of_shapes[shape]
-        }
-        for shape in unique_shapes
+        [step_reader.face_colors[sub_shp] for sub_shp in sub_shapes_of_shapes[i]]
+        for i in range(len(unique_shapes))
     ]
 
-    # TODO flatten subshapes and shapes in a single list
+    # TODO flatten subshapes and shapes in a single list (/!\ and preserve instancing)
     args = zip(
         names_of_unique,
         unique_shapes,
@@ -142,18 +141,18 @@ def load_step(
     )
 
     # Deflections are fixed for all tasks
-    worker = partial(
-        build_shape_mesh, lin_deflection=lin_deflection, ang_deflection=ang_deflection
-    )
+    worker = partial(build_shape_mesh, lind=lin_deflection, angd=ang_deflection)
+    # # Exectute meshing
+    # with Pool(4) as pool:
+    #     objsdata = pool.map(worker, args)
 
-    # Exectute meshing
-    with Pool(4) as pool:
-        objsdata = pool.map(worker, args)
+    # Multiprocess fails for the moment, use that instead
+    objsdata = [worker(*a) for a in args]
 
     # Create objects with mesh
     wm.progress_begin(0, total)
     for i, (shp, node_index) in enumerate(unique_shapes):
-        obj =bl_obj_from_mesh_shape(
+        obj = bl_obj_from_mesh_shape(
             objsdata[i],
             shp,
             tree.nodes[node_index],
@@ -170,28 +169,32 @@ def load_step(
 
     # Create instanced objects
     for i, (shp, node_index) in enumerate(instanced_shapes):
-        created_objs.append(bl_obj_from_instance_shape(
-            shp,
-            tree.nodes[node_index],
-            names_of_instances[i],
-            filepath,
-            node_index,
-            created_uuid,
-            created_names,
-            total,
-            i,
-        ))
+        created_objs.append(
+            bl_obj_from_instance_shape(
+                shp,
+                tree.nodes[node_index],
+                names_of_instances[i],
+                filepath,
+                node_index,
+                created_uuid,
+                created_names,
+                total,
+                i,
+            )
+        )
 
     # Create empties objects
     if hierarchy_empties:
         for i, node_index in enumerate(empties):
-            created_objs.append(bl_hierarchy_empties(
-                tree.nodes[node_index],
-                names_of_empties[i],
-                filepath,
-                node_index,
-                created_uuid,
-            ))
+            created_objs.append(
+                bl_hierarchy_empties(
+                    tree.nodes[node_index],
+                    names_of_empties[i],
+                    filepath,
+                    node_index,
+                    created_uuid,
+                )
+            )
 
     # assert len(created_objs) == len(shapes_labels)
     print("\n" + repr(step_reader.import_problems))

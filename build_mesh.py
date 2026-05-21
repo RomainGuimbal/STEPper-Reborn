@@ -3,12 +3,13 @@ import bmesh
 import numpy as np
 from .trimesh import TriMesh
 from .utils import bpy_update_object_data
+from .step_reader import build_trimesh
 
 
 def is_vert_sharp_vectorized(edge_dirs, norms_a, norms_b, margin_sq):
-    dot_ab = np.einsum('ij,ij->i', norms_a, norms_b)
-    ea = np.einsum('ij,ij->i', edge_dirs, norms_a)
-    eb = np.einsum('ij,ij->i', edge_dirs, norms_b)
+    dot_ab = np.einsum("ij,ij->i", norms_a, norms_b)
+    ea = np.einsum("ij,ij->i", edge_dirs, norms_a)
+    eb = np.einsum("ij,ij->i", edge_dirs, norms_b)
 
     proj_dot = dot_ab - ea * eb
     len_sq_a = 1.0 - ea * ea
@@ -55,26 +56,38 @@ def mark_edges(objdata, trimesh: TriMesh):
     edge_vert1_id = [e.verts[0].index for e in bm.edges]
     edge_vert2_id = [e.verts[1].index for e in bm.edges]
 
-    get_fallback = lambda a : a if a is not None else np.zeros(3, dtype=np.float32)
+    get_fallback = lambda a: a if a is not None else np.zeros(3, dtype=np.float32)
 
-    norm_face1_vert1 = np.float32([get_fallback(norms_face1[i].get(v)) for i,v in enumerate(edge_vert1_id)])
-    norm_face2_vert1 = np.float32([get_fallback(norms_face2[i].get(v)) for i,v in enumerate(edge_vert1_id)])
-    norm_face1_vert2 = np.float32([get_fallback(norms_face1[i].get(v)) for i,v in enumerate(edge_vert2_id)])
-    norm_face2_vert2 = np.float32([get_fallback(norms_face2[i].get(v)) for i,v in enumerate(edge_vert2_id)])
+    norm_face1_vert1 = np.float32(
+        [get_fallback(norms_face1[i].get(v)) for i, v in enumerate(edge_vert1_id)]
+    )
+    norm_face2_vert1 = np.float32(
+        [get_fallback(norms_face2[i].get(v)) for i, v in enumerate(edge_vert1_id)]
+    )
+    norm_face1_vert2 = np.float32(
+        [get_fallback(norms_face1[i].get(v)) for i, v in enumerate(edge_vert2_id)]
+    )
+    norm_face2_vert2 = np.float32(
+        [get_fallback(norms_face2[i].get(v)) for i, v in enumerate(edge_vert2_id)]
+    )
 
-    vert1= np.float32([np.float32(e.verts[0].co) for e in bm.edges])
-    vert2= np.float32([np.float32(e.verts[1].co) for e in bm.edges])
+    vert1 = np.float32([np.float32(e.verts[0].co) for e in bm.edges])
+    vert2 = np.float32([np.float32(e.verts[1].co) for e in bm.edges])
     edge_dir = vert1 - vert2
 
-    is_vert1_sharp = is_vert_sharp_vectorized(edge_dir, norm_face1_vert1, norm_face2_vert1, margin_sq)
-    is_vert2_sharp = is_vert_sharp_vectorized(edge_dir, norm_face1_vert2, norm_face2_vert2, margin_sq)
+    is_vert1_sharp = is_vert_sharp_vectorized(
+        edge_dir, norm_face1_vert1, norm_face2_vert1, margin_sq
+    )
+    is_vert2_sharp = is_vert_sharp_vectorized(
+        edge_dir, norm_face1_vert2, norm_face2_vert2, margin_sq
+    )
     is_sharp = np.logical_and(is_vert1_sharp, is_vert2_sharp)
 
     bm.free()
 
-    is_seam = np.bool([
-        len(lf) == 2 and batches[lf[0]] != batches[lf[1]] for lf in linked_faces_id
-    ])
+    is_seam = np.bool(
+        [len(lf) == 2 and batches[lf[0]] != batches[lf[1]] for lf in linked_faces_id]
+    )
 
     if "sharp_edge" not in objdata.attributes:
         objdata.attributes.new(name="sharp_edge", type="BOOLEAN", domain="EDGE")
@@ -91,14 +104,28 @@ def mark_edges(objdata, trimesh: TriMesh):
     seam_att.data.foreach_set("value", is_seam)
 
 
-
-def build_mesh(step_reader, name, shp, lind, angd, vcol_name="Colors"):
+def build_shape_mesh(
+    name,
+    shape,
+    sub_shapes_of_shape,
+    shape_color,
+    sub_shapes_colors,
+    lind,
+    angd,
+    vcol_name="Colors",
+):
     hacks = set([])
     if bpy.context.scene.stepper.hack_skip_zero_solids:
-        hacks.add("skip_solids")
+        hacks.add("skip_zero_solids")
 
-    trimesh: TriMesh = step_reader.build_trimesh(
-        shp, lin_def=lind, ang_def=angd, hacks=hacks
+    trimesh: TriMesh = build_trimesh(
+        shape,
+        sub_shapes_of_shape,
+        shape_color,
+        sub_shapes_colors,
+        lin_def=lind,
+        ang_def=angd,
+        hacks=hacks,
     )
 
     trimesh.fuse_verts()
@@ -131,7 +158,7 @@ def build_mesh(step_reader, name, shp, lind, angd, vcol_name="Colors"):
 def bl_obj_from_occ_shape(
     step_reader,
     shp,
-    tree,
+    node_info,
     filename,
     filepath,
     hierarchy_empties,
@@ -143,9 +170,7 @@ def bl_obj_from_occ_shape(
     total,
     i,
 ):
-    parent_uuid, self_uuid, tag, name, _, local_t, global_t = tree.nodes[
-        node_index
-    ].get_values()
+    parent_uuid, self_uuid, tag, name, _, local_t, global_t = node_info.get_values()
 
     if name == "root":
         name = filename + ".empties"
@@ -167,7 +192,9 @@ def bl_obj_from_occ_shape(
 
         else:  # Create new mesh and object from scratch
             print("[Build]", end="", flush=True)
-            mesh = build_mesh(step_reader, name, shp, lin_deflection, ang_deflection)
+            mesh = build_shape_mesh(
+                step_reader, name, shp, lin_deflection, ang_deflection
+            )
             obj = bpy.data.objects.new(name, mesh)
             bpy.context.collection.objects.link(obj)
             # bpy.context.view_layer.objects.active = obj

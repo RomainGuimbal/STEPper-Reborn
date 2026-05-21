@@ -155,67 +155,95 @@ def build_shape_mesh(
     return objdata
 
 
-def bl_obj_from_occ_shape(
-    step_reader,
+def bl_obj_from_mesh_shape(
+    mesh,
     shp,
-    node_info,
-    filename,
+    node,
+    name,
     filepath,
-    hierarchy_empties,
     node_index,
-    created_names,
-    lin_deflection,
-    ang_deflection,
     created_uuid,
     total,
     i,
 ):
-    parent_uuid, self_uuid, tag, name, _, local_t, global_t = node_info.get_values()
+    parent_uuid, self_uuid, tag, _, _, _, _ = node.get_values()
 
-    if name == "root":
-        name = filename + ".empties"
+    print("\nBuilding ({}/{}): {} ".format(i + 1, total, name), end="", flush=True)
+    print("[T" + repr(shp.ShapeType()) + "]", end="", flush=True)
 
-    shape_name = "tt_" + repr(tag)
+    print("[Build]", end="", flush=True)
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(obj)
 
-    obj = None
+    # assign custom properties to blender objects
+    obj["STEP_tag"] = tag
+    obj["STEP_parent"] = parent_uuid
+    obj["STEP_uuid"] = self_uuid
+    obj["STEP_file"] = filepath
+    obj["STEP_name"] = name
+    obj["STEP_tree_location"] = node_index
+    created_uuid[self_uuid] = obj
 
-    # Shape found in leaf
-    if shp:
-        print("\nBuilding ({}/{}): {} ".format(i + 1, total, name), end="", flush=True)
-        print("[T" + repr(shp.ShapeType()) + "]", end="", flush=True)
+    return obj
 
-        # If object already build, just copy it, using linked mesh data
-        if shape_name in created_names:
-            print("[Link]", end="", flush=True)
-            source_obj = created_names[shape_name]
-            obj = source_obj.copy()
 
-        else:  # Create new mesh and object from scratch
-            print("[Build]", end="", flush=True)
-            mesh = build_shape_mesh(
-                step_reader, name, shp, lin_deflection, ang_deflection
-            )
-            obj = bpy.data.objects.new(name, mesh)
-            bpy.context.collection.objects.link(obj)
-            # bpy.context.view_layer.objects.active = obj
-            created_names[shape_name] = obj
+def bl_obj_from_instance_shape(
+    shp,
+    node,
+    name,
+    filepath,
+    node_index,
+    created_uuid,
+    created_names,
+    total,
+    i,
+):
+    parent_uuid, self_uuid, tag, name, _, local_t, global_t = node.get_values()
+    tt_tag = "tt_" + repr(tag)
 
-    # No shape in leaf, empty creation enabled, do this
-    elif hierarchy_empties:
-        # Create empty
-        obj = bpy.data.objects.new(name, None)
-        obj.empty_display_size = 2
-        obj.empty_display_type = "PLAIN_AXES"
-        # set_obj_matrix_world(obj, global_t)
+    print("\nBuilding ({}/{}): {} ".format(i + 1, total, name), end="", flush=True)
+    print("[T" + repr(shp.ShapeType()) + "]", end="", flush=True)
+
+    # If object already build, just copy it, using linked mesh data
+    print("[Link]", end="", flush=True)
+    source_obj = created_names[tt_tag]
+    obj = source_obj.copy()
 
     # Object has been created
-    if obj:
-        # assign custom properties to blender objects
-        obj["STEP_tag"] = tag
-        obj["STEP_parent"] = parent_uuid
-        obj["STEP_uuid"] = self_uuid
-        obj["STEP_file"] = filepath
-        obj["STEP_name"] = name
-        obj["STEP_tree_location"] = node_index
-        created_uuid[self_uuid] = obj
+    # assign custom properties to blender objects
+    obj["STEP_tag"] = tag
+    obj["STEP_parent"] = parent_uuid
+    obj["STEP_uuid"] = self_uuid
+    obj["STEP_file"] = filepath
+    obj["STEP_name"] = name
+    obj["STEP_tree_location"] = node_index
+    created_uuid[self_uuid] = obj
+
+    return obj
+
+
+def bl_hierarchy_empties(
+    node,
+    name,
+    filepath,
+    node_index,
+    created_uuid
+):
+    parent_uuid, self_uuid, tag, name, _, local_t, global_t = node.get_values()
+
+    # Create empty
+    obj = bpy.data.objects.new(name, None)
+    obj.empty_display_size = 2
+    obj.empty_display_type = "PLAIN_AXES"
+    # set_obj_matrix_world(obj, global_t)
+
+    # assign custom properties to blender objects
+    obj["STEP_tag"] = tag
+    obj["STEP_parent"] = parent_uuid
+    obj["STEP_uuid"] = self_uuid
+    obj["STEP_file"] = filepath
+    obj["STEP_name"] = name
+    obj["STEP_tree_location"] = node_index
+    created_uuid[self_uuid] = obj
+
     return obj

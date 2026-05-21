@@ -31,7 +31,12 @@ from .utils import (
     transform_to_up,
     choose_hierarchy_types,
 )
-from .build_mesh import build_shape_mesh, bl_obj_from_occ_shape
+from .build_mesh import (
+    build_shape_mesh,
+    bl_obj_from_mesh_shape,
+    bl_obj_from_instance_shape,
+    bl_hierarchy_empties,
+)
 from .build_blender_hierarchy import build_blender_hierarchy
 
 global_file_cache = {}
@@ -85,18 +90,38 @@ def load_step(
     all_shapes = tree.get_shapes()
     total = len(all_shapes)
 
-    wm.progress_begin(0, total)
+    # Generate meshes
 
-    # Generate meshes (data production)
-    all_tags = [
+    # Gather parameters
+    # Split shapes depending unique or not
+    all_tt_tags = [
         "tt_" + repr(tree.nodes[node_index].tag) for _, node_index in all_shapes
     ]
-    shp_dict = dict(zip(all_tags, all_shapes))
-    unique_shapes = [shp_dict[tag] for tag in set(all_tags)]
+    shp_dict = dict(zip(all_tt_tags, all_shapes))
+    unique_tt_tags = set()
+    unique_shapes = []
+    instanced_shapes = []
+    empties = []
+    for t in all_tt_tags:
+        if t in unique_tt_tags:
+            shp = shp_dict.get(t)
+            if shp[0]:  # is not empty shape
+                instanced_shapes.append(shp)
+            else:  # is empty shape
+                empties.append(shp[1])  # append just the index
+        else:
+            unique_shapes.append(shp_dict[t])
+            unique_tt_tags.add(t)
 
+    # Rename roots
     rename = lambda name: name if name != "root" else filename + ".empties"
-    names = [rename(tree.nodes[node_index].name) for _, node_index in unique_shapes]
+    names_of_unique = [tree.nodes[node_index].name for _, node_index in unique_shapes]
+    names_of_instances = [
+        tree.nodes[node_index].name for _, node_index in instanced_shapes
+    ]
+    names_of_empties = [rename(tree.nodes[node_index].name) for node_index in empties]
 
+    # Other params
     sub_shapes_of_shapes = [step_reader.sub_shapes[shape] for shape in unique_shapes]
     shape_colors = [step_reader.face_colors[shape] for shape in unique_shapes]
     sub_shapes_colors = [
@@ -107,44 +132,66 @@ def load_step(
         for shape in unique_shapes
     ]
 
-    # TODO parallelize
-    # TODO align subshapes and shapes
-
+    # TODO flatten subshapes and shapes in a single list
     args = zip(
-        names, unique_shapes, sub_shapes_of_shapes, shape_colors, sub_shapes_colors
+        names_of_unique,
+        unique_shapes,
+        sub_shapes_of_shapes,
+        shape_colors,
+        sub_shapes_colors,
     )
 
-    # deflections are fixed for all tasks
-    worker = partial(build_shape_mesh, lin_deflection=lin_deflection, ang_deflection=ang_deflection)
+    # Deflections are fixed for all tasks
+    worker = partial(
+        build_shape_mesh, lin_deflection=lin_deflection, ang_deflection=ang_deflection
+    )
 
+    # Exectute meshing
     with Pool(4) as pool:
         objsdata = pool.map(worker, args)
 
+    # Create objects with mesh
+    wm.progress_begin(0, total)
+    for i, (shp, node_index) in enumerate(unique_shapes):
+        obj =bl_obj_from_mesh_shape(
+            objsdata[i],
+            shp,
+            tree.nodes[node_index],
+            names_of_unique[i],
+            filepath,
+            node_index,
+            created_uuid,
+            total,
+            i,
+        )
+        created_objs.append(obj)
+        created_names[unique_tt_tags[i]] = obj
+        wm.progress_update(i)
 
-    # create objects and collections ? or above
-    # assign meshes to objects (data consumption)
+    # Create instanced objects
+    for i, (shp, node_index) in enumerate(instanced_shapes):
+        created_objs.append(bl_obj_from_instance_shape(
+            shp,
+            tree.nodes[node_index],
+            names_of_instances[i],
+            filepath,
+            node_index,
+            created_uuid,
+            created_names,
+            total,
+            i,
+        ))
 
-    # for i, (shp, node_index) in enumerate(all_shapes):
-    #     node_info = tree.nodes[node_index]
-
-    #     obj = bl_obj_from_occ_shape(
-    #         step_reader,
-    #         shp,
-    #         node_info,
-    #         filename,
-    #         filepath,
-    #         hierarchy_empties,
-    #         node_index,
-    #         created_names,
-    #         lin_deflection,
-    #         ang_deflection,
-    #         created_uuid,
-    #         total,
-    #         i,
-    #     )
-    #     if obj:
-    #         created_objs.append(obj)
-    #     wm.progress_update(i)
+    # Create empties objects
+    if hierarchy_empties:
+        for i, node_index in enumerate(empties):
+            created_objs.append(bl_hierarchy_empties(
+                tree.nodes[node_index],
+                names_of_empties[i],
+                filepath,
+                node_index,
+                created_uuid,
+            ))
 
     # assert len(created_objs) == len(shapes_labels)
     print("\n" + repr(step_reader.import_problems))

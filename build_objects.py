@@ -1,7 +1,6 @@
 import bpy
 import bmesh
 import time
-import ntpath
 import numpy as np
 from OCP import TopAbs
 from .trimesh import TriMesh
@@ -10,11 +9,11 @@ from .step_reader import build_trimesh
 from .utils import (
     obj_unlink_all,
     transform_to_up,
-    choose_hierarchy_types,
 )
 from multiprocessing import Pool
 from functools import partial
 from .build_blender_hierarchy import build_blender_hierarchy
+
 
 def is_vert_sharp_vectorized(edge_dirs, norms_a, norms_b, margin_sq):
     dot_ab = np.einsum("ij,ij->i", norms_a, norms_b)
@@ -124,7 +123,7 @@ def build_shape_mesh(
     angd=0.5,
     vert_color_name="Colors",
 ) -> bpy.types.Mesh:
-    
+
     trimesh, empty_shape_count = build_trimesh(
         shape,
         sub_shapes_of_shape,
@@ -250,34 +249,8 @@ def bl_hierarchy_empties(node, name, filepath, node_index, created_uuid):
     return obj
 
 
-
-def load_step(
-    context,
-    filepath,
-    step_reader,
-    custom_scale=None,
-    lin_deflection=0.8,
-    ang_deflection=0.5,
-    # merge_distance=0.001,
-    up_as="Y",
-    htypes="TREE",
-):
-    hierarchy_flat, hierarchy_tree, hierarchy_empties = choose_hierarchy_types(htypes)
-
-    filename = "".join(ntpath.basename(filepath).split(".")[:-1])
-
+def load_step(filename, step_reader):
     tree = step_reader.tree
-    scale = step_reader.scale
-    if custom_scale is not None:
-        scale = custom_scale
-
-    # divide by Blender unit length
-    scale /= context.scene.unit_settings.scale_length
-    print("Current Blender scale set at:", context.scene.unit_settings.scale_length)
-
-    created_objs = []
-    created_names = {}
-    created_uuid = {}
 
     # traverse shapes, render in "face" mode
     start_time = time.time()
@@ -298,7 +271,7 @@ def load_step(
     shp_dict = dict(zip(all_tt_tags, all_shapes))
     unique_tt_tags_set = set()  # alleged as 5000x faster for lookup
     unique_tt_tags = []  # kind of forced to have both to preserve order
-    unique_shapes_tp = [] # shape tuples
+    unique_shapes_tp = []  # shape tuples
     instanced_shapes = []
     empties = []
     for t in all_tt_tags:
@@ -313,11 +286,13 @@ def load_step(
         else:  # is empty shape
             empties.append(shp[1])  # append just the index
 
-    unique_shapes = [s for s,_ in unique_shapes_tp]
+    unique_shapes = [s for s, _ in unique_shapes_tp]
 
     # Rename roots
     rename = lambda name: name if name != "root" else filename + ".empties"
-    names_of_unique = [tree.nodes[node_index].name for _, node_index in unique_shapes_tp]
+    names_of_unique = [
+        tree.nodes[node_index].name for _, node_index in unique_shapes_tp
+    ]
     names_of_instances = [
         tree.nodes[node_index].name for _, node_index in instanced_shapes
     ]
@@ -331,6 +306,44 @@ def load_step(
         for i in range(len(unique_shapes_tp))
     ]
 
+    wm.progress_end()
+    print(f"STEP loading time elapsed: {time.time()-start_time:.2f}")
+
+    # assert len(created_objs) == len(shapes_labels)
+    print("\n" + repr(step_reader.import_problems))
+
+    return (
+        True,
+        tree,
+        (
+            names_of_unique,
+            unique_shapes,
+            sub_shapes_of_shapes,
+            shape_colors,
+            sub_shapes_colors,
+        ),
+        (
+            names_of_unique,
+            unique_shapes_tp,
+            names_of_instances,
+            instanced_shapes,
+            names_of_empties,
+            empties,
+            unique_tt_tags,
+            total
+        )
+    )
+
+
+def build_meshes(
+    names_of_unique,
+    unique_shapes,
+    sub_shapes_of_shapes,
+    shape_colors,
+    sub_shapes_colors,
+    lin_deflection,
+    ang_deflection,
+):
     # TODO flatten subshapes and shapes in a single list (/!\ and preserve instancing)
     args = zip(
         names_of_unique,
@@ -350,6 +363,26 @@ def load_step(
     # Multiprocess fails for the moment, use that instead
     objsdata = [worker(*a) for a in args]
 
+    return objsdata
+
+
+def create_objects(
+    names_of_unique,
+    unique_shapes_tp,
+    names_of_instances,
+    instanced_shapes,
+    names_of_empties,
+    empties,
+    unique_tt_tags,
+    total,
+    objsdata,
+    tree,
+    filepath,
+    created_uuid,
+    created_objs,
+    created_names,
+    hierarchy_empties,
+):
     # Create objects with mesh
     for i, (shp, node_index) in enumerate(unique_shapes_tp):
         obj = bl_obj_from_mesh_shape(
@@ -365,7 +398,7 @@ def load_step(
         )
         created_objs.append(obj)
         created_names[unique_tt_tags[i]] = obj
-        wm.progress_update(i)
+        # wm.progress_update(i)
 
     # Create instanced objects
     for i, (shp, node_index) in enumerate(instanced_shapes):
@@ -396,10 +429,21 @@ def load_step(
                 )
             )
 
-    # assert len(created_objs) == len(shapes_labels)
-    print("\n" + repr(step_reader.import_problems))
+    return created_objs
 
-    # remove all temporary links (for RAM ?)
+
+def put_objects_in_hierarchy(
+    created_objs,
+    filename,
+    tree,
+    hierarchy_flat,
+    hierarchy_tree,
+    hierarchy_empties,
+    created_uuid,
+    up_as,
+    scale,
+):
+    # remove all temporary links (why do they exist ? for RAM ?)
     for tobj in created_objs:
         obj_unlink_all(tobj)
 
@@ -415,8 +459,3 @@ def load_step(
     )
 
     transform_to_up(up_as[0], created_objs, scale)
-
-    wm.progress_end()
-    print(f"STEP loading time elapsed: {time.time()-start_time:.2f}")
-
-    return True

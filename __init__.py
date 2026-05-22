@@ -18,12 +18,20 @@
 import os
 import math
 import bpy
+import ntpath
 
 from bpy.props import StringProperty
 from bpy_extras.io_utils import ImportHelper
-from .build_objects import load_step #, build_mesh
+from .build_objects import (
+    load_step,
+    build_meshes,
+    create_objects,
+    put_objects_in_hierarchy,
+    # build_mesh
+)
 from .utils import (
     calculate_detail_level,
+    choose_hierarchy_types
 )
 
 global_file_cache = {}
@@ -253,7 +261,7 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
 
             from viztracer import VizTracer
 
-            with VizTracer(output_file="/tmp/blender_trace.json") as tracer:
+            with VizTracer(output_file="/tmp/blender_trace.json", tracer_entries=3000000, min_duration= 5) as tracer:
                 from .step_reader import ReadSTEP
 
                 if path_to_file not in global_file_cache:
@@ -267,15 +275,60 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
                     step_reader = global_file_cache[path_to_file]
                     print("Loaded file from cache")
 
-                result = load_step(
-                    context,
+                filename = "".join(ntpath.basename(path_to_file).split(".")[:-1])
+
+                result, tree, mesh_args, obj_args = load_step(
+                    filename,
+                    step_reader
+                )
+
+                objsdata = build_meshes(
+                    *mesh_args,
+                    l_def,
+                    a_def,
+                )
+
+                created_objs = []
+                created_names = {}
+                created_uuid = {}
+
+                custom_scale = self.user_scale if self.custom_scale else None
+                scale = step_reader.scale
+                if custom_scale is not None:
+                    scale = custom_scale
+
+                # divide by Blender unit length
+                scale /= context.scene.unit_settings.scale_length
+                print(
+                    "Current Blender scale set at:",
+                    context.scene.unit_settings.scale_length,
+                )
+
+                hierarchy_flat, hierarchy_tree, hierarchy_empties = (
+                    choose_hierarchy_types(self.hierarchy_types)
+                )
+
+                create_objects(
+                    *obj_args,
+                    objsdata,
+                    tree,
                     path_to_file,
-                    step_reader,
-                    custom_scale=self.user_scale if self.custom_scale else None,
-                    lin_deflection=l_def,
-                    ang_deflection=a_def,
-                    up_as=self.up_as,
-                    htypes=self.hierarchy_types,
+                    created_uuid,
+                    created_objs,
+                    created_names,
+                    hierarchy_empties,
+                )
+                
+                put_objects_in_hierarchy(
+                    created_objs,
+                    filename,
+                    tree,
+                    hierarchy_flat,
+                    hierarchy_tree,
+                    hierarchy_empties,
+                    created_uuid,
+                    self.up_as,
+                    scale,
                 )
         if result:
             return {"FINISHED"}

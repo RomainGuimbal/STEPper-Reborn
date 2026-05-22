@@ -758,7 +758,7 @@ class ReadSTEP:
 
         face_data = OrderedDict()
         batch = 0
-        
+
         brep_tool = BRep_Tool()
 
         # Iterate over the main shape and its sub shapes

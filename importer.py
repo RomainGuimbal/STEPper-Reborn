@@ -612,16 +612,15 @@ class ReadSTEP:
         tree = _get_shapes()
         self.tree = tree
 
-    def triangulate_face(self, face, tform):
-        bt = BRep_Tool()
+    def triangulate_face(self, face, tform, brep_tool):
         location = TopLoc_Location()
-        facing = bt.Triangulation_s(face, location)
+        facing = brep_tool.Triangulation_s(face, location)
         if facing is None:
             # Mesh error, no triangulation found for part
             self.import_problems["Triangulation"] += 1
             return None
 
-        # nsurf = bt.Surface(face)
+        # nsurf = brep_tool.Surface(face)
         surface = BRepAdaptor_Surface(face)
         prop = BRepLProp_SLProps(surface, 2, gp.Resolution_s())
         # prop = BRepLProp_SLProps(surface, 2, 1e-4)
@@ -759,6 +758,8 @@ class ReadSTEP:
 
         face_data = OrderedDict()
         batch = 0
+        
+        brep_tool = BRep_Tool()
 
         # Iterate over the main shape and its sub shapes
         for _, shp in enumerate(iter_shapes):
@@ -786,7 +787,7 @@ class ReadSTEP:
                 exc = ex.Current()
                 face = TopoDS.Face_s(exc)
 
-                mesh = self.triangulate_face(face, trf)
+                mesh = self.triangulate_face(face, trf, brep_tool)
                 if mesh:
                     # If shape or sub-shape has defined color, set it so
                     mesh.set_batch(batch)

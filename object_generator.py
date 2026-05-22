@@ -8,7 +8,6 @@ from .trimesh import TriMesh
 
 GLOBAL_FILE_CACHE = {}
 
-
 def scalemat(mat, sl):
     scaling = np.zeros_like(mat)
     scaling[np.diag_indices(4)] = sl

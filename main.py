@@ -795,6 +795,14 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
         header, body = layout.panel("Resolution", default_closed=False)
         header.label(text="General")
         if body:
+            # Orientation
+            row = body.row()
+            row.prop(self, "up_as")
+
+            # Hierarchy
+            row = body.row()
+            row.prop(self, "hierarchy_types", text="Hierarchy")
+
             # Custom scale
             col = body.column(align=False, heading="Overwrite Scale")
             row = col.row(align=True)
@@ -803,14 +811,6 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
             sub = sub.row(align=True)
             sub.active = self.custom_scale
             sub.prop(self, "user_scale", text="")
-
-            # Orientation
-            row = body.row()
-            row.prop(self, "up_as")
-
-            # Hierarchy
-            row = body.row()
-            row.prop(self, "hierarchy_types", text="Hierarchy")
 
         header, body = layout.panel("Resolution", default_closed=False)
         header.label(text="Resolution")

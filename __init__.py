@@ -12,16 +12,8 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 # Copyright 2021 Tommi Hyppänen
-
-bl_info = {
-    "name": "STEPper Reborn",
-    "author": "Romain Guimbal (maintainer), Ambi (original creator)",
-    "description": "STEP importer, OpenCASCADE-based",
-    "blender": (5, 1, 0),
-    "version": (2, 1, 0),
-    "location": "3D View > Tools panel > Stepper",
-    "category": "Import",
-}
+#
+## Modified 2025 Romain Guimbal
 
 INSIDE_BLENDER = True
 try:

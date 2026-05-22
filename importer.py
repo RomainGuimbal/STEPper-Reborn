@@ -26,25 +26,19 @@ from . import trimesh
 from . import nurbs
 
 importlib.reload(trimesh)
-from OCP.BRep import BRep_Tool
+
+from OCP.BRep import BRep_Builder, BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Surface
-from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert, BRepBuilderAPI_Transform
+from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert
 from OCP.BRepLProp import BRepLProp_SLProps
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.BRepTools import BRepTools
-# from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
 from OCP.GeomConvert import GeomConvert
-# from OCP.GeomLProp import GeomLProp_SLProps
-from OCP.gp import gp #, gp_Dir, gp_Pln, gp_Pnt, gp_Pnt2d, gp_Trsf, gp_Vec, gp_XYZ
-
-# from OCP.Standard import Standard_Real
+from OCP.gp import gp
 from OCP.IFSelect import IFSelect_RetDone
-# from OCP.IMeshTools import IMeshTools_Parameters
-# from OCP.Interface import Interface_Static
 from OCP.Quantity import Quantity_Color, Quantity_TOC_RGB
 from OCP.STEPCAFControl import STEPCAFControl_Reader
 from OCP.STEPControl import STEPControl_Reader
-
 from OCP.TCollection import TCollection_ExtendedString
 from OCP.TColStd import TColStd_SequenceOfAsciiString
 from OCP.TDataStd import TDataStd_Name
@@ -63,10 +57,7 @@ from OCP.TopAbs import (
 )
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopLoc import TopLoc_Location
-
-# from OCP.TopExp import topexp_MapShapes
-# from OCP.TopTools import TopTools_MapOfShape, TopTools_IndexedMapOfShape
-from OCP.TopoDS import TopoDS_Shape, TopoDS
+from OCP.TopoDS import TopoDS_Compound, TopoDS_Shape, TopoDS
 from OCP.XCAFApp import XCAFApp_Application
 from OCP.XCAFDoc import (
     XCAFDoc_DocumentTool,
@@ -197,8 +188,8 @@ def equalize_2d_points(pts):
 
 
 def get_label_name(label):
-    """Return the name of a TDF_Label as a string, fallback to EntryDumpToString or Tag if needed.""" 
-    
+    """Return the name of a TDF_Label as a string, fallback to EntryDumpToString or Tag if needed."""
+
     # Try to use name label if available
     name_attr = TDataStd_Name()
     if label.FindAttribute(TDataStd_Name.GetID_s(), name_attr):
@@ -610,9 +601,7 @@ class ReadSTEP:
 
             tree = ShapeTree()
             for i in range(labels.Length()):
-                print(
-                    f"DataExchange: Reading shape ({i + 1}/{labels.Length()})"
-                )
+                print(f"DataExchange: Reading shape ({i + 1}/{labels.Length()})")
 
                 root_item = labels.Value(i + 1)
                 node = tree.add(tree.get_root_id(), root_item)

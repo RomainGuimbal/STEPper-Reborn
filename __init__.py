@@ -13,7 +13,7 @@
 #
 # Copyright 2021 Tommi Hyppänen
 #
-## Modified 2025 Romain Guimbal
+# Modified 2025 Romain Guimbal
 
 import os
 import math

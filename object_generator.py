@@ -51,7 +51,7 @@ def add_material(name, color, link_vertex_color=False, overwrite=False):
         # mat.node_tree.links.new(sn.outputs["Alpha"], a)
 
         vcol = mat.node_tree.nodes.new(type="ShaderNodeVertexColor")
-        vcol.location = [-400.0, 300.0]
+        vcol.location = [-400.0, 200.0]
         vcol.layer_name = "Colors"
 
         if link_vertex_color:
@@ -67,7 +67,8 @@ def add_material(name, color, link_vertex_color=False, overwrite=False):
 
 def bpy_update_object_data(
     objdata, bm, vcol_name, colors, uvs, norms, mat_names, build_materials=True
-):
+):  
+    # Already existing object materials
     if build_materials:
         # set colors and mats
         obj_mats = {}
@@ -280,11 +281,12 @@ def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
     #     angd *= size
 
     import time
-
     start_time = time.time()
+
     mesh: TriMesh = step_reader.build_trimesh(
         shp, lin_def=lind, ang_def=angd, hacks=hacks
     )
+
     end_time = time.time()
     print(f"Trimesh build time: {end_time - start_time:.2f} seconds")
 

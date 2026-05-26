@@ -12,6 +12,8 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 # Copyright 2021 Tommi Hyppänen
+#
+# Modified 2025 Romain Guimbal
 
 
 import importlib
@@ -300,19 +302,22 @@ class ReadSTEP:
         """
         # default color = pink
         c = Quantity_Color(1.0, 0.0, 1.0, Quantity_TOC_RGB)
-        colorset = False
+        iscolorset = False
         colortype = None
 
         shape = self.shape_tool.GetShape_s(lab)
+        print(shape.ShapeType())
 
         c_gen = self.color_tool.GetColor(shape, XCAFDoc_ColorGen, c)
         c_surf = self.color_tool.GetColor(shape, XCAFDoc_ColorSurf, c)
-        c_curv = self.color_tool.GetColor(shape, XCAFDoc_ColorCurv, c)
+        c_curv = False #self.color_tool.GetColor(shape, XCAFDoc_ColorCurv, c) # TODO uncomment once priority are working
+
         if c_gen or c_surf or c_curv:
-            colorset = True
+            iscolorset = True
+            # Color priority (1/type) is the same as CAD assistant material tree display
             colortype = c_gen * 1 + c_surf * 2 + c_curv * 3
 
-        return c, colortype, colorset
+        return c, colortype, iscolorset
 
     def print_all_colors(self):
         tcol = Quantity_Color(1.0, 0.0, 1.0, Quantity_TOC_RGB)
@@ -529,15 +534,12 @@ class ReadSTEP:
 
         self.init_reader(filename)
 
-        # output_shapes = {}
-        # outliers = defaultdict(set)
-
-        def _cprio(lab, shape):
-            "Get label color"
-            tc, ctype, ok = self.query_color(lab)
-            self.face_colors[shape] = tc if ok else None
-            if ok:
-                return ctype
+        def _set_color_and_get_priority(shape_label, shape):
+            """Type == Priority here"""
+            c, color_type, has_color = self.query_color(shape_label)
+            self.face_colors[shape] = c if has_color else None
+            if has_color:
+                return color_type
             else:
                 return 0
 
@@ -586,7 +588,8 @@ class ReadSTEP:
 
                 self.shape_label[shape] = lab
 
-                self.face_color_priority[shape] = _cprio(lab, shape)
+                # TODO Color priority usage looks non-implemented
+                self.face_color_priority[shape] = _set_color_and_get_priority(lab, shape)
 
                 l_subss = TDF_LabelSequence()
                 self.shape_tool.GetSubShapes_s(lab, l_subss)
@@ -596,8 +599,9 @@ class ReadSTEP:
                     shape_sub = self.shape_tool.GetShape_s(lab_subs)
                     self.shape_label[shape_sub] = lab_subs
                     self.sub_shapes[shape].append(shape_sub)
-                    self.face_color_priority[shape_sub] = _cprio(lab_subs, shape_sub)
-                # Color priority is the same as CAD assistant material tree display
+                    self.face_color_priority[shape_sub] = _set_color_and_get_priority(
+                        lab_subs, shape_sub
+                    )
             else:
                 print("DataExchange error: Item is neither assembly or a simple shape")
 
@@ -795,7 +799,8 @@ class ReadSTEP:
             brepmesh = BRepMesh_IncrementalMesh(shp, lin_def, False, ang_def, False)
             brepmesh.Perform()
             trf = shp.Location().Transformation()
-            # Iterate through faces with TopExp_Explorer
+
+            # Iterate through faces
             while ex.More():
                 exc = ex.Current()
                 face = TopoDS.Face_s(exc)

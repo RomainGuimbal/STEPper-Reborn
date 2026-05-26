@@ -401,6 +401,9 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
         rebuilt_meshes = set()
         selected_objects = list(context.selected_objects)
 
+        prev_mode = context.mode
+        bpy.ops.object.mode_set(mode="OBJECT")
+
         lin_def = context.scene.stepper.lin_deflection * 2000
         ang_def = context.scene.stepper.ang_deflection
         # merge_distance = context.scene.stepper.merge_distance
@@ -458,6 +461,8 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
 
         for obj in context.selected_objects:
             obj.display_type = "TEXTURED"
+
+        bpy.ops.object.mode_set(mode=prev_mode)
 
         return {"FINISHED"}
 

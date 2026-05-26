@@ -136,10 +136,6 @@ def bpy_update_object_data(
     #             removed.add(i)
 
     # Update mesh from Bmesh
-    # Apply also in edit mode, not just object mode
-    prev_mode = bpy.context.object.mode
-    bpy.ops.object.mode_set(mode="OBJECT")
-
     bm.to_mesh(objdata)
 
     if len(norms) > 0:
@@ -150,9 +146,6 @@ def bpy_update_object_data(
         # Filter removed items from norms
         # norms = [n for ni, n in enumerate(norms) if ni not in removed]
         objdata.normals_split_custom_set(np.array(norms))
-
-    # Return to previous object/edit mode
-    bpy.ops.object.mode_set(mode=prev_mode)
 
 
 def calculate_detail_level(dlev):
@@ -336,9 +329,7 @@ def build_nurbs(step_reader, shp, name):
                     d = bm.verts.new(nb_v1[v].location())
                     bm.faces.new((d, c, b, a))
         prev_mode = bpy.context.object.mode
-        bpy.ops.object.mode_set(mode="OBJECT")
         bm.to_mesh(obj.data)
-        bpy.ops.object.mode_set(mode=prev_mode)
         # obj.display_type = 'WIRE'
         return obj
     else:

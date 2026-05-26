@@ -269,9 +269,13 @@ class ShapeTree:
     def get_max_id(self):
         return len(self.nodes) - 1
 
-    def add(self, parent, label) -> ShapeTreeNode:
+    def add(self, parent, lab) -> ShapeTreeNode:
+        """
+        Args:
+            lab: Shape label
+        """
         loc = len(self.nodes)
-        node = ShapeTreeNode(parent, loc, label.Tag(), get_label_name(label))
+        node = ShapeTreeNode(parent, loc, lab.Tag(), get_label_name(lab))
         self.nodes[parent].children.append(loc)
         self.nodes.append(node)
         return self.nodes[-1]
@@ -289,13 +293,17 @@ class ReadSTEP:
     def __init__(self, filename):
         self.read_file(filename)
 
-    def query_color(self, label, overwrite=False):
+    def query_color(self, lab, overwrite=False):
+        """
+        Args:
+            lab: shape label
+        """
         # default color = pink
         c = Quantity_Color(1.0, 0.0, 1.0, Quantity_TOC_RGB)
         colorset = False
         colortype = None
 
-        shape = self.shape_tool.GetShape_s(label)
+        shape = self.shape_tool.GetShape_s(lab)
 
         c_gen = self.color_tool.GetColor(shape, XCAFDoc_ColorGen, c)
         c_surf = self.color_tool.GetColor(shape, XCAFDoc_ColorSurf, c)
@@ -594,11 +602,16 @@ class ReadSTEP:
                 print("DataExchange error: Item is neither assembly or a simple shape")
 
         def _get_shapes():
+            """
+            Root shapes are not part of shapes
+            """
             # self.shape_tool.UpdateAssemblies()
 
+            # Get free shapes labels
             labels = TDF_LabelSequence()
             self.shape_tool.GetFreeShapes(labels)
 
+            # Get sub shapes of each free shape and add to tree
             tree = ShapeTree()
             for i in range(labels.Length()):
                 print(f"DataExchange: Reading shape ({i + 1}/{labels.Length()})")

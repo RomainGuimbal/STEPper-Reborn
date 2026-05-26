@@ -456,14 +456,15 @@ def load_step(
     all_shapes = tree.get_shapes()
     total = len(all_shapes)
 
+    # Build mesh objects
     wm.progress_begin(0, total)
     for i, (shp, node_index) in enumerate(all_shapes):
-        parent_uuid, self_uuid, tag, name, _, local_t, global_t = tree.nodes[
+        parent_uuid, self_uuid, tag, obj_name, _, local_t, global_t = tree.nodes[
             node_index
         ].get_values()
 
-        if name == "root":
-            name = filename + ".empties"
+        if obj_name == "root":
+            obj_name = filename + ".empties"
 
         shape_name = "tt_" + repr(tag)
         wm.progress_update(i)
@@ -472,7 +473,7 @@ def load_step(
         # Shape found in leaf
         if shp:
             print(
-                "\nBuilding ({}/{}): {} ".format(i + 1, total, name), end="", flush=True
+                "\nBuilding ({}/{}): {} ".format(i + 1, total, obj_name), end="", flush=True
             )
             print("[T" + repr(shp.ShapeType()) + "]", end="", flush=True)
 
@@ -487,7 +488,7 @@ def load_step(
                 print("[Build]", end="", flush=True)
 
                 # Create new mesh and object from scratch
-                obj = create_new_obj_with_mesh(name)
+                obj = create_new_obj_with_mesh(obj_name)
                 bpy.ops.object.mode_set(mode="OBJECT")
                 build_mesh(step_reader, obj, shp, lin_deflection, ang_deflection)
 
@@ -503,7 +504,7 @@ def load_step(
         # No shape in leaf, empty creation enabled, do this
         elif hierarchy_empties:
             # Create empty
-            obj = bpy.data.objects.new(name, None)
+            obj = bpy.data.objects.new(obj_name, None)
             obj.empty_display_size = 2
             obj.empty_display_type = "PLAIN_AXES"
             created_objs.append(obj)
@@ -516,7 +517,7 @@ def load_step(
             obj["STEP_parent"] = parent_uuid
             obj["STEP_uuid"] = self_uuid
             obj["STEP_file"] = filepath
-            obj["STEP_name"] = name
+            obj["STEP_name"] = obj_name
             obj["STEP_tree_location"] = node_index
             created_uuid[self_uuid] = obj
 

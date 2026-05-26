@@ -32,6 +32,15 @@ from .object_generator import (
 # from .sizeof import total_size
 # utils.memorytrace_start()
 
+axis_enum = [
+    ("XPOS", "X", "", 0),
+    # ("XNEG", "X-", "", 1),
+    ("YPOS", "Y", "", 2),
+    # ("YNEG", "Y-", "", 3),
+    ("ZPOS", "Z", "", 4),
+    # ("ZNEG", "Z-", "", 5),
+]
+
 
 class PG_Stepper(bpy.types.PropertyGroup):
     build_materials: bpy.props.BoolProperty(
@@ -95,6 +104,13 @@ class PG_Stepper(bpy.types.PropertyGroup):
         default=True,
     )
 
+    preferred_up_axis: bpy.props.EnumProperty(
+        items=axis_enum,
+        name="preferred Up Axis",
+        default=axis_enum[2][0],
+        description="Preselected up axis at import",
+    )
+
 
 class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
     bl_idname = "object.occ_import_step"
@@ -108,30 +124,15 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
     override_file: StringProperty(default="", options={"HIDDEN"})
 
     fw_as: bpy.props.EnumProperty(
-        items=[
-            ("XPOS", "X", "", 0),
-            # ("XNEG", "X-", "", 1),
-            ("YPOS", "Y", "", 2),
-            # ("YNEG", "Y-", "", 3),
-            ("ZPOS", "Z", "", 4),
-            # ("ZNEG", "Z-", "", 5),
-        ],
+        items=axis_enum,
         name="Forward",
         default="ZPOS",
         description="Forward axis of the imported model",
     )
 
     up_as: bpy.props.EnumProperty(
-        items=[
-            ("XPOS", "X", "", 0),
-            # ("XNEG", "X-", "", 1),
-            ("YPOS", "Y", "", 2),
-            # ("YNEG", "Y-", "", 3),
-            ("ZPOS", "Z", "", 4),
-            # ("ZNEG", "Z-", "", 5),
-        ],
+        items=axis_enum,
         name="Up Axis",
-        default="YPOS",
         description="Up axis of the imported model",
     )
 
@@ -186,18 +187,29 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
         default=False,
     )
 
+    ran : bpy.props.BoolProperty(
+        name="Operator Already ran in this session",
+    )
+
+    def invoke(self, context, event):
+        if not self.ran:
+            self.up_as = context.scene.stepper.preferred_up_axis
+            self.ran = True
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False  # No animation.
         # row = layout.row(align=True)
 
-        header, body = layout.panel("Resolution", default_closed=False)
+        header, body = layout.panel("General", default_closed=False)
         header.label(text="General")
         if body:
             # Orientation
             row = body.row()
-            row.prop(self, "up_as")
+            row.prop(self, "up_as", expand=True)
 
             # Hierarchy
             row = body.row()
@@ -217,24 +229,17 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
         if body:
             # row = col.row()
             # row.prop(self, "merge_distance")
-
+            col = body.column()
             if bpy.context.scene.stepper.simpler_parameters:
-                row = body.row()
-                row.prop(self, "detail_level")
-
+                col.prop(self, "detail_level")
             else:
-                row = body.row()
-                row.prop(self, "lin_deflection")
-
-                row = body.row()
-                row.prop(self, "ang_deflection")
+                col.prop(self, "lin_deflection")
+                col.prop(self, "ang_deflection")
 
             # row = col.row()
             # row.prop(prg, "fw_as")
 
     def execute(self, context):
-        # print(type(self.files))
-        # print(dir(self.files))
         l_def, a_def = self.lin_deflection * 2000, self.ang_deflection
         if bpy.context.scene.stepper.simpler_parameters:
             a_def, l_def = calculate_detail_level(self.detail_level)
@@ -467,7 +472,7 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class STEP_PT_STEPper(bpy.types.Panel):
+class STEP_PT_side_panel(bpy.types.Panel):
     bl_label = "STEPper: Build"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
@@ -501,7 +506,7 @@ class STEP_PT_STEPper(bpy.types.Panel):
         row.operator(STEP_OT_RebuildSelected.bl_idname, text="Rebuild selected")
 
 
-class STEP_PT_STEPper_Reload(bpy.types.Panel):
+class STEP_PT_side_panel_Reload(bpy.types.Panel):
     bl_label = "STEPper: File"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
@@ -513,7 +518,7 @@ class STEP_PT_STEPper_Reload(bpy.types.Panel):
         row.operator(STEP_OT_ReloadSTEP.bl_idname, text="Reload STEP file")
 
 
-class STEP_PT_STEPper_Debug(bpy.types.Panel):
+class STEP_PT_side_panel_Debug(bpy.types.Panel):
     bl_label = "STEPper: Debug"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
@@ -575,21 +580,21 @@ class STEP_AddonPreferences(bpy.types.AddonPreferences):
     def draw(self, context):
         layout = self.layout
 
-        row = layout.row()
-        row.prop(bpy.context.scene.stepper, "build_materials")
+        col = layout.column()
+        col.prop(bpy.context.scene.stepper, "build_materials")
+        col.prop(bpy.context.scene.stepper, "hack_skip_zero_solids")
+        col.prop(bpy.context.scene.stepper, "simpler_parameters")
 
-        row = layout.row()
-        row.prop(bpy.context.scene.stepper, "hack_skip_zero_solids")
+        row = col.row(align=True)  # does nothing. Probably unsuported
+        row.label(text="Preferred Up Axis")
+        row.prop(bpy.context.scene.stepper, "preferred_up_axis", expand=True)
 
-        row = layout.row()
-        row.prop(bpy.context.scene.stepper, "simpler_parameters")
+        # col = layout.col()
+        # col.prop(bpy.context.scene.stepper, "hierarchy_types")
 
-        # row = layout.row()
-        # row.prop(bpy.context.scene.stepper, "hierarchy_types")
-
-        # row.operator(PMM_OT_EnsurePIP.bl_idname, text="Ensure PIP")
-        # row.operator(PMM_OT_UpgradePIP.bl_idname, text="Upgrade PIP")
-        # row.operator(PMM_OT_PIPList.bl_idname, text="List")
+        # col.operator(PMM_OT_EnsurePIP.bl_idname, text="Ensure PIP")
+        # col.operator(PMM_OT_UpgradePIP.bl_idname, text="Upgrade PIP")
+        # col.operator(PMM_OT_PIPList.bl_idname, text="List")
 
 
 def menu_func_import(self, context):
@@ -606,9 +611,9 @@ classes = (
     STEP_OT_ReloadSTEP,
     STEP_OT_FixASCII,
     STEP_OT_PrintDebug,
-    STEP_PT_STEPper,
-    STEP_PT_STEPper_Reload,
-    STEP_PT_STEPper_Debug,
+    STEP_PT_side_panel,
+    STEP_PT_side_panel_Reload,
+    STEP_PT_side_panel_Debug,
     STEP_AddonPreferences,
 )
 

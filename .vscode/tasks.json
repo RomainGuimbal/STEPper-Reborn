@@ -1,17 +1,24 @@
 {
-    // See https://go.microsoft.com/fwlink/?LinkId=733558
-    // for the documentation about the tasks.json format
-    "version": "2.0.0",
-    "tasks": [
-        {   
-            "label": "Start Blender",
-            "type": "shell",
-            "command": "${command:blender.start}",
-            // "args": [
-            //     "--blenderExecutable \"C:/Program Files/Blender Foundation/Blender 5.1/blender.exe\""
-            // FAILS : go here instead : C:\Users\romai\AppData\Roaming\Code\User\settings.json
-            // ],
-            "problemMatcher": []
-        },
-    ]
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Blender",
+      "type": "shell",
+      "command": "${command:blender.start}",
+      // "args": [
+      //     "--blenderExecutable \"C:/Program Files/Blender Foundation/Blender 5.1/blender.exe\""
+      // FAILS : go here instead : C:\Users\romai\AppData\Roaming\Code\User\settings.json
+      // ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Open Profile",
+      "type": "shell",
+      "command": "vizviewer",
+      "args": ["C:/tmp/blender_trace.json"],
+      "problemMatcher": []
+    }
+  ]
 }

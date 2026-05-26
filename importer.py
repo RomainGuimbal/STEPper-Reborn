@@ -12,6 +12,8 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 # Copyright 2021 Tommi Hyppänen
+#
+# Modified 2025 Romain Guimbal
 
 
 import importlib
@@ -26,25 +28,19 @@ from . import trimesh
 from . import nurbs
 
 importlib.reload(trimesh)
-from OCP.BRep import BRep_Tool
+
+from OCP.BRep import BRep_Builder, BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Surface
-from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert, BRepBuilderAPI_Transform
+from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert
 from OCP.BRepLProp import BRepLProp_SLProps
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.BRepTools import BRepTools
-# from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
 from OCP.GeomConvert import GeomConvert
-# from OCP.GeomLProp import GeomLProp_SLProps
-from OCP.gp import gp #, gp_Dir, gp_Pln, gp_Pnt, gp_Pnt2d, gp_Trsf, gp_Vec, gp_XYZ
-
-# from OCP.Standard import Standard_Real
+from OCP.gp import gp
 from OCP.IFSelect import IFSelect_RetDone
-# from OCP.IMeshTools import IMeshTools_Parameters
-# from OCP.Interface import Interface_Static
 from OCP.Quantity import Quantity_Color, Quantity_TOC_RGB
 from OCP.STEPCAFControl import STEPCAFControl_Reader
 from OCP.STEPControl import STEPControl_Reader
-
 from OCP.TCollection import TCollection_ExtendedString
 from OCP.TColStd import TColStd_SequenceOfAsciiString
 from OCP.TDataStd import TDataStd_Name
@@ -63,10 +59,7 @@ from OCP.TopAbs import (
 )
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopLoc import TopLoc_Location
-
-# from OCP.TopExp import topexp_MapShapes
-# from OCP.TopTools import TopTools_MapOfShape, TopTools_IndexedMapOfShape
-from OCP.TopoDS import TopoDS_Shape, TopoDS
+from OCP.TopoDS import TopoDS_Compound, TopoDS_Shape, TopoDS
 from OCP.XCAFApp import XCAFApp_Application
 from OCP.XCAFDoc import (
     XCAFDoc_DocumentTool,
@@ -197,8 +190,8 @@ def equalize_2d_points(pts):
 
 
 def get_label_name(label):
-    """Return the name of a TDF_Label as a string, fallback to EntryDumpToString or Tag if needed.""" 
-    
+    """Return the name of a TDF_Label as a string, fallback to EntryDumpToString or Tag if needed."""
+
     # Try to use name label if available
     name_attr = TDataStd_Name()
     if label.FindAttribute(TDataStd_Name.GetID_s(), name_attr):
@@ -278,9 +271,13 @@ class ShapeTree:
     def get_max_id(self):
         return len(self.nodes) - 1
 
-    def add(self, parent, label) -> ShapeTreeNode:
+    def add(self, parent, lab) -> ShapeTreeNode:
+        """
+        Args:
+            lab: Shape label
+        """
         loc = len(self.nodes)
-        node = ShapeTreeNode(parent, loc, label.Tag(), get_label_name(label))
+        node = ShapeTreeNode(parent, loc, lab.Tag(), get_label_name(lab))
         self.nodes[parent].children.append(loc)
         self.nodes.append(node)
         return self.nodes[-1]
@@ -298,22 +295,29 @@ class ReadSTEP:
     def __init__(self, filename):
         self.read_file(filename)
 
-    def query_color(self, label, overwrite=False):
+    def query_color(self, lab, overwrite=False):
+        """
+        Args:
+            lab: shape label
+        """
         # default color = pink
         c = Quantity_Color(1.0, 0.0, 1.0, Quantity_TOC_RGB)
-        colorset = False
+        iscolorset = False
         colortype = None
 
-        shape = self.shape_tool.GetShape_s(label)
+        shape = self.shape_tool.GetShape_s(lab)
+        print(shape.ShapeType())
 
         c_gen = self.color_tool.GetColor(shape, XCAFDoc_ColorGen, c)
         c_surf = self.color_tool.GetColor(shape, XCAFDoc_ColorSurf, c)
-        c_curv = self.color_tool.GetColor(shape, XCAFDoc_ColorCurv, c)
+        c_curv = False #self.color_tool.GetColor(shape, XCAFDoc_ColorCurv, c) # TODO uncomment once priority are working
+
         if c_gen or c_surf or c_curv:
-            colorset = True
+            iscolorset = True
+            # Color priority (1/type) is the same as CAD assistant material tree display
             colortype = c_gen * 1 + c_surf * 2 + c_curv * 3
 
-        return c, colortype, colorset
+        return c, colortype, iscolorset
 
     def print_all_colors(self):
         tcol = Quantity_Color(1.0, 0.0, 1.0, Quantity_TOC_RGB)
@@ -530,15 +534,12 @@ class ReadSTEP:
 
         self.init_reader(filename)
 
-        # output_shapes = {}
-        # outliers = defaultdict(set)
-
-        def _cprio(lab, shape):
-            "Get label color"
-            tc, ctype, ok = self.query_color(lab)
-            self.face_colors[shape] = tc if ok else None
-            if ok:
-                return ctype
+        def _set_color_and_get_priority(shape_label, shape):
+            """Type == Priority here"""
+            c, color_type, has_color = self.query_color(shape_label)
+            self.face_colors[shape] = c if has_color else None
+            if has_color:
+                return color_type
             else:
                 return 0
 
@@ -587,7 +588,8 @@ class ReadSTEP:
 
                 self.shape_label[shape] = lab
 
-                self.face_color_priority[shape] = _cprio(lab, shape)
+                # TODO Color priority usage looks non-implemented
+                self.face_color_priority[shape] = _set_color_and_get_priority(lab, shape)
 
                 l_subss = TDF_LabelSequence()
                 self.shape_tool.GetSubShapes_s(lab, l_subss)
@@ -597,22 +599,26 @@ class ReadSTEP:
                     shape_sub = self.shape_tool.GetShape_s(lab_subs)
                     self.shape_label[shape_sub] = lab_subs
                     self.sub_shapes[shape].append(shape_sub)
-                    self.face_color_priority[shape_sub] = _cprio(lab_subs, shape_sub)
-                # Color priority is the same as CAD assistant material tree display
+                    self.face_color_priority[shape_sub] = _set_color_and_get_priority(
+                        lab_subs, shape_sub
+                    )
             else:
                 print("DataExchange error: Item is neither assembly or a simple shape")
 
         def _get_shapes():
+            """
+            Root shapes are not part of shapes
+            """
             # self.shape_tool.UpdateAssemblies()
 
+            # Get free shapes labels
             labels = TDF_LabelSequence()
             self.shape_tool.GetFreeShapes(labels)
 
+            # Get sub shapes of each free shape and add to tree
             tree = ShapeTree()
             for i in range(labels.Length()):
-                print(
-                    f"DataExchange: Reading shape ({i + 1}/{labels.Length()})"
-                )
+                print(f"DataExchange: Reading shape ({i + 1}/{labels.Length()})")
 
                 root_item = labels.Value(i + 1)
                 node = tree.add(tree.get_root_id(), root_item)
@@ -623,16 +629,15 @@ class ReadSTEP:
         tree = _get_shapes()
         self.tree = tree
 
-    def triangulate_face(self, face, tform):
-        bt = BRep_Tool()
+    def triangulate_face(self, face, tform, brep_tool):
         location = TopLoc_Location()
-        facing = bt.Triangulation_s(face, location)
+        facing = brep_tool.Triangulation_s(face, location)
         if facing is None:
             # Mesh error, no triangulation found for part
             self.import_problems["Triangulation"] += 1
             return None
 
-        # nsurf = bt.Surface(face)
+        # nsurf = brep_tool.Surface(face)
         surface = BRepAdaptor_Surface(face)
         prop = BRepLProp_SLProps(surface, 2, gp.Resolution_s())
         # prop = BRepLProp_SLProps(surface, 2, 1e-4)
@@ -771,6 +776,8 @@ class ReadSTEP:
         face_data = OrderedDict()
         batch = 0
 
+        brep_tool = BRep_Tool()
+
         # Iterate over the main shape and its sub shapes
         for _, shp in enumerate(iter_shapes):
             col = self.face_colors[shp]
@@ -792,12 +799,13 @@ class ReadSTEP:
             brepmesh = BRepMesh_IncrementalMesh(shp, lin_def, False, ang_def, False)
             brepmesh.Perform()
             trf = shp.Location().Transformation()
-            # Iterate through faces with TopExp_Explorer
+
+            # Iterate through faces
             while ex.More():
                 exc = ex.Current()
                 face = TopoDS.Face_s(exc)
 
-                mesh = self.triangulate_face(face, trf)
+                mesh = self.triangulate_face(face, trf, brep_tool)
                 if mesh:
                     # If shape or sub-shape has defined color, set it so
                     mesh.set_batch(batch)

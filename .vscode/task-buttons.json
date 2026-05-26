@@ -1,0 +1,16 @@
+{
+  "buttons": [
+    {
+      "name": "",
+      "task": "Start Blender",
+      "icon": "🍊",
+      "tooltip": "Start Blender"
+    },
+    {
+      "name": "",
+      "task": "Open Profile",
+      "icon": "📊",
+      "tooltip": "Open Profile"
+    }
+  ]
+}

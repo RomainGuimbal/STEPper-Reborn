@@ -150,16 +150,16 @@ class TriMesh:
 
     def add_mesh(self, other):
         # assert other is TriMesh
-        for i in range(len(other.tris)):
-            otr = other.tris[i]
-            self.add_tri(
-                [other.verts[t] for t in otr.indices],
-                otr.norms,
-                otr.color,
-                otr.material,
-                otr.material_name,
-                otr.uvs,
-                otr.batch,
+        offset = len(self.verts)
+        self.verts.extend(other.verts)
+        for t in other.tris:
+            shifted = (
+                t.indices[0] + offset,
+                t.indices[1] + offset,
+                t.indices[2] + offset,
+            )
+            self.tris.append(
+                TriData(shifted, t.norms, t.uvs, t.color, t.material, t.material_name, t.batch)
             )
 
     def add_mesh_overwrite_identical(self, other):

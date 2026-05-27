@@ -261,7 +261,7 @@ class TriMesh:
             if self.tris[t].color == None:
                 self.tris[t].color = undef_color
 
-    def add_verts_to_bm(self, bm):
+    def add_to_bm(self, bm):
         "ASSUMPTION: empty BMesh"
         assert len(bm.faces) == 0
         assert len(bm.verts) == 0
@@ -272,7 +272,9 @@ class TriMesh:
             nv.index = vi
             verts.append(nv)
 
-        return verts # temp, for transition
+        for ti, t in enumerate(self.tris):
+            nf = bm.faces.new((verts[i] for i in t.indices))
+            nf.index = ti
 
     def get_loop_colors(self):
         "Return colors in triangle loop creation order"

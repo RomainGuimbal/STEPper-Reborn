@@ -270,11 +270,7 @@ def shape_size(shp):
     return diag
 
 
-def mark_edges(trimesh, bm, verts, edges_as_seams, discontinuity_as_sharp):
-    for ti, t in enumerate(trimesh.tris):
-        nf = bm.faces.new((verts[i] for i in t.indices))
-        nf.index = ti
-
+def mark_edges(trimesh, bm, edges_as_seams, discontinuity_as_sharp):
     # mark all non-manifold edges as seams
     if edges_as_seams:
         for e in bm.edges:
@@ -389,11 +385,11 @@ def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
 
     print(f"[bm] {len(trimesh.verts)}", end="")
     bm = bmesh.new()
-    verts = trimesh.add_verts_to_bm(bm)
+    trimesh.add_to_bm(bm)
     trimesh.fill_empty_color()
 
     if trimesh.tris:
-        mark_edges(trimesh, bm, verts, edges_as_seams=True, discontinuity_as_sharp=True)
+        mark_edges(trimesh, bm, edges_as_seams=True, discontinuity_as_sharp=True)
 
 
     bpy_update_object_data(

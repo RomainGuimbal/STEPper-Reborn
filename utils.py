@@ -146,6 +146,28 @@ def add_material(name, color, link_vertex_color=False, overwrite=False):
     return mat
 
 
+def vert_of_edges(mesh: bpy.types.Mesh):
+    edge_verts = np.empty(len(mesh.edges) * 2, dtype=np.int32)
+    mesh.edges.foreach_get("vertices", edge_verts)
+    edge_verts = edge_verts.reshape(-1, 2)  # transpose
+    
+    return edge_verts
+
+def vert_coordinates_of_edges(mesh: bpy.types.Mesh, edge_verts):
+    # Vert positions
+    coords = np.empty(len(mesh.vertices) * 3, dtype=np.float32)
+    mesh.vertices.foreach_get("co", coords)
+    coords = coords.reshape(-1, 3)
+
+    # Edge verts positions
+    vert_co_0 = np.empty((len(mesh.edges), 3), dtype=np.float32)
+    vert_co_1 = np.empty((len(mesh.edges), 3), dtype=np.float32)
+    for i in range(mesh.edges):
+        vert_co_0[i] = coords[edge_verts[i, 0]]
+        vert_co_1[i] = coords[edge_verts[i, 1]]
+    
+    return vert_co_0, vert_co_1
+
 def faces_of_edges(mesh: bpy.types.Mesh):
     # Loop data
     loop_edge = np.empty(len(mesh.loops), dtype=np.int32)

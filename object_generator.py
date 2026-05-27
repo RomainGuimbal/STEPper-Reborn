@@ -12,6 +12,8 @@ from .utils import (
     transform_to_up,
     create_new_obj_with_mesh,
     faces_of_edges,
+    vert_coordinates_of_edges,
+    vert_of_edges,
 )
 
 GLOBAL_FILE_CACHE = {}
@@ -124,10 +126,15 @@ def choose_hierarchy_types(htypes):
     return hierarchy_flat, hierarchy_tree, hierarchy_empties
 
 
-def is_vert_sharp_vectorized(edge_dirs, norms_a, norms_b, margin_sq):
+def project_and_compare_normals(proj_plane_normal, norms_a, norms_b, margin_sq):
+    """
+    Normals are projected and compared.
+    Vectorized.
+    Computation is simplified so it doesn't resemble a direct projection with normalized vectors.
+    """
     dot_ab = np.einsum("ij,ij->i", norms_a, norms_b)
-    ea = np.einsum("ij,ij->i", edge_dirs, norms_a)
-    eb = np.einsum("ij,ij->i", edge_dirs, norms_b)
+    ea = np.einsum("ij,ij->i", proj_plane_normal, norms_a)
+    eb = np.einsum("ij,ij->i", proj_plane_normal, norms_b)
 
     proj_dot = dot_ab - ea * eb
     len_sq_a = 1.0 - ea * ea
@@ -138,36 +145,6 @@ def is_vert_sharp_vectorized(edge_dirs, norms_a, norms_b, margin_sq):
 
     over_margin = np.less((proj_dot * proj_dot), margin_sq * len_sq_a * len_sq_b)
     return np.logical_and(over_margin, np.logical_not(are_too_small))
-
-
-# def _project_plane_normalize(plane, vec):
-#     # if False:
-#     #     l0 = np.linalg.norm(plane)
-#     #     l1 = np.linalg.norm(vec)
-#     #     assert l0 > 0.99 and l0 < 1.01
-#     #     assert l1 > 0.99 and l1 < 1.01
-#     prj = vec - (plane * np.dot(plane, vec))
-#     prjn = np.linalg.norm(prj)
-#     if prjn == 0.0:
-#         prj = np.array([0.0, 0.0, 1.0])
-#     else:
-#         prj /= prjn
-#     return prj
-
-
-# def _face_normals_disagree_on_edge_plane(plane, norms, margin):
-#     # Project norms to plane: norm - (plane * dot(plane, norm))
-#     # .. and calc dots
-#     p0 = _project_plane_normalize(plane, norms[0])
-#     dmax = 1.0
-#     for i in norms[1:]:
-#         prj = _project_plane_normalize(plane, i)
-#         dd = np.dot(p0, prj)
-#         if dd < dmax:
-#             dmax = dd
-#     if dmax < 1.0 - margin:
-#         return True
-#     return False
 
 
 def find_seams(trimesh, face_pair_of_edges):
@@ -182,118 +159,51 @@ def find_seams(trimesh, face_pair_of_edges):
 
 def find_sharp(ob_data, trimesh, face_pair_of_edges, margin):
     # Sharp edges: mark where per-vertex normals are discontinuous
-    ## Pre-build face_vert_norms[face_idx][global_vert_idx] = norm to replace
-    ## the inner range(3) scan with O(1) dict lookups.
 
-    # for each triangle, store the 3 vert normals
-    norms_in_vert = defaultdict(list)
+    # for each vertex, stores all normals
+    norms_of_vert = defaultdict(list)
     for t in trimesh.tris:
         for ni, n in enumerate(t.norms):
-            norms_in_vert[t.indices[ni]].append(n)
-    
-    # Normals at verts of each triangle
-    # face_vert_norms = [
-    #     {t.indices[j]: t.norms[j] for j in range(3)} for t in trimesh.tris
-    # ]
-
-
+            norms_of_vert[t.indices[ni]].append(n)
 
     # get vert normals for 2 faces of the edge
-    norms_face1 = [face_vert_norms[lf[0]] for lf in face_pair_of_edges]
-    norms_face2 = [face_vert_norms[lf[1]] for lf in face_pair_of_edges]
-
-    # Vert ids of each edge
-    edge_verts = np.empty(len(ob_data.edges) * 2, dtype=np.int32)
-    ob_data.edges.foreach_get("vertices", edge_verts)
-    edge_verts = edge_verts.reshape(-1, 2)  # transpose
-
-    # Vert positions
-    coords = np.empty(len(ob_data.vertices) * 3, dtype=np.float32)
-    ob_data.vertices.foreach_get("co", coords)
-    coords = coords.reshape(-1, 3)
-
-    # Edge verts positions
-    vert_co_0 = np.empty((len(ob_data.edges), 3), dtype=np.float32)
-    vert_co_1 = np.empty((len(ob_data.edges), 3), dtype=np.float32)
-    for i in range(ob_data.edges):
-        vert_co_0[i] = coords[edge_verts[i, 0]]
-        vert_co_1[i] = coords[edge_verts[i, 1]]
+    norms_face1 = [norms_of_vert[lf[0]] for lf in face_pair_of_edges]
+    norms_face2 = [norms_of_vert[lf[1]] for lf in face_pair_of_edges]
 
     get_fallback = lambda a: (a if a is not None else np.zeros(3, dtype=np.float32))
 
     # Get normals for each face of each vertex of each edge
     norm_face1_vert1 = np.empty((len(ob_data.edges), 2, 3), dtype=np.float32)
-    for e in ob_data.edges:
-        []
+    norm_face2_vert1 = np.empty((len(ob_data.edges), 2, 3), dtype=np.float32)
+    norm_face1_vert2 = np.empty((len(ob_data.edges), 2, 3), dtype=np.float32)
+    norm_face2_vert2 = np.empty((len(ob_data.edges), 2, 3), dtype=np.float32)
 
-    norm_face1_vert1 = np.float32(
-        [get_fallback(norms_face1[i].get(v)) for i, v in enumerate(vert1_ex)]
-    )
-    norm_face2_vert1 = np.float32(
-        [get_fallback(norms_face2[i].get(v)) for i, v in enumerate(vert1_ex)]
-    )
-    norm_face1_vert2 = np.float32(
-        [get_fallback(norms_face1[i].get(v)) for i, v in enumerate(vert2_ex)]
-    )
-    norm_face2_vert2 = np.float32(
-        [get_fallback(norms_face2[i].get(v)) for i, v in enumerate(vert2_ex)]
-    )
+    # Vert ids of each edge
+    edge_verts = vert_of_edges(ob_data)
 
+    # Normals of vert and face of the edge
+    for i, e in enumerate(ob_data.edges):
+        v1, v2 = edge_verts[e]
+        norm_face1_vert1[i] = get_fallback(norms_face1[i].get(v1))
+        norm_face2_vert1[i] = get_fallback(norms_face2[i].get(v1))
+        norm_face1_vert2[i] = get_fallback(norms_face1[i].get(v2))
+        norm_face2_vert2[i] = get_fallback(norms_face2[i].get(v2))
+
+    # Edge normal plane's normal vector
+    vert_co_0, vert_co_1 = vert_coordinates_of_edges(ob_data)
     edge_dir = vert_co_0 - vert_co_1
 
+    # margin squared is used for faster computation
     margin_sq = (1 - margin) ** 2
-    is_vert1_sharp = is_vert_sharp_vectorized(
+    is_vert1_sharp = project_and_compare_normals(
         edge_dir, norm_face1_vert1, norm_face2_vert1, margin_sq
     )
-    is_vert2_sharp = is_vert_sharp_vectorized(
+    is_vert2_sharp = project_and_compare_normals(
         edge_dir, norm_face1_vert2, norm_face2_vert2, margin_sq
     )
     is_sharp = np.logical_and(is_vert1_sharp, is_vert2_sharp)
 
     return is_sharp
-
-
-# def find_sharp(trimesh, bm, margin):
-#     # gather all normals based on vert index
-#     # compare dot products for those gathered
-#     # if above threshold, vert index discontinuity = true
-#     # go through edges and based on vert indices match mark as sharp
-
-#     # norms_in_vert = defaultdict(list)
-#     # for t in self.tris:
-#     #     for ni, n in enumerate(t.norms):
-#     #         norms_in_vert[t.indices[ni]].append(n)
-
-#     # Needs to be based on (2) face verts of the edge, not all faces of vert
-#     for e in bm.edges:
-#         fi = [f.index for f in e.link_faces]
-#         if len(fi) != 2:
-#             continue
-#         
-#         # trimesh faces
-#         t0, t1 = trimesh.tris[fi[0]], trimesh.tris[fi[1]]
-
-#         # find connected face filtered norms for edge verts
-#         # TODO: maybe optimize this, (test if all are clockwise)
-#         e_norms = [[], []]
-#         for i in range(3):
-#             if t0.indices[i] == e.verts[0].index:
-#                 e_norms[0].append(t0.norms[i])
-#             if t1.indices[i] == e.verts[0].index:
-#                 e_norms[0].append(t1.norms[i])
-#             if t0.indices[i] == e.verts[1].index:
-#                 e_norms[1].append(t0.norms[i])
-#             if t1.indices[i] == e.verts[1].index:
-#                 e_norms[1].append(t1.norms[i])
-
-#         # Check the dots on plane defined by the edge as normal
-#         plane = np.array((e.verts[0].co - e.verts[1].co).normalized())
-#         if _face_normals_disagree_on_edge_plane(
-#             plane, e_norms[0], margin
-#         ) and _face_normals_disagree_on_edge_plane(plane, e_norms[1], margin):
-#             e.smooth = False
-#         else:
-#             e.smooth = True
 
 
 def mark_edges(objdata, trimesh: TriMesh, seams, sharp, margin=0.02):

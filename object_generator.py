@@ -215,11 +215,6 @@ def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
     if bpy.context.scene.stepper.hack_skip_zero_solids:
         hacks.add("skip_solids")
 
-    # adaptative = bpy.context.scene.stepper.use_adaptive_resolution
-    # if adaptative :
-    #     size = shape_size(shp)
-    #     angd *= size
-
     import time
 
     start_time = time.time()
@@ -241,11 +236,11 @@ def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
     trimesh.fill_empty_color()
 
     if trimesh.tris:
-        mark_edges(trimesh, bm, edges_as_seams=True, discontinuity_as_sharp=True)
+        mark_edges(obj.data, trimesh, edges_as_seams=True, discontinuity_as_sharp=True, margin=0.02)
+>>>>>>> Stashed changes
 
     bpy_update_object_data(
         obj.data,
-        bm,
         vcol_name,
         trimesh.get_loop_colors(),
         trimesh.get_loop_uvs(),

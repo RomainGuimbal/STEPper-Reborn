@@ -29,6 +29,27 @@ def set_obj_matrix_world(obj, mtx):
             obj.matrix_world[row][col] = mtx[row][col]
 
 
+def calculate_detail_level(dlev):
+    """Angular deflection, Linear deflection"""
+    if dlev < 100:
+        l_def = 100.0 / float(dlev)
+    else:
+        l_def = (100.0 / float(dlev)) ** 2.0
+    return 0.8, l_def
+
+
+def create_new_obj_with_mesh(name, set_active=True):
+    """
+    Create new empty object and mesh, link them, and optionally set to active
+    """
+    empty_mesh = bpy.data.meshes.new(name)
+    obj = bpy.data.objects.new(name, empty_mesh)
+    bpy.context.collection.objects.link(obj)
+    if set_active:
+        bpy.context.view_layer.objects.active = obj
+    return obj
+
+
 def transform_to_up(up, chosen_objects, scale, to_cursor=True):
     """
     Set all chosen_objects transforms <up>["X", "Y", "Z"] as up

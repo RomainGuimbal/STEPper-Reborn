@@ -22,10 +22,10 @@ from bpy.props import StringProperty
 from bpy_extras.io_utils import ImportHelper
 from .object_generator import (
     load_step,
-    calculate_detail_level,
     build_mesh,
     GLOBAL_FILE_CACHE,
 )
+from .utils import calculate_detail_level
 
 # from collections import defaultdict
 
@@ -187,7 +187,7 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
         default=False,
     )
 
-    ran : bpy.props.BoolProperty(
+    ran: bpy.props.BoolProperty(
         name="Operator Already ran in this session",
     )
 
@@ -196,7 +196,7 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
             self.up_as = context.scene.stepper.preferred_up_axis
             self.ran = True
         context.window_manager.fileselect_add(self)
-        return {'RUNNING_MODAL'}
+        return {"RUNNING_MODAL"}
 
     def draw(self, context):
         layout = self.layout

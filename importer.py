@@ -667,19 +667,27 @@ class ReadSTEP:
         # tab = facing.Nodes()
         tri = facing.Triangles()
 
-        verts = []
-        norms = []
-        tris = []
-        uvs = []
-
         undef_normals = False
+        is_reversed = face.Orientation() == TopAbs_REVERSED
 
         itform = tform.Inverted()
 
+        # Pre-allocate arrays with known sizes
+        d_nbnodes = facing.NbNodes()
+        d_nbtriangles = facing.NbTriangles()
+        
+        verts = np.empty((d_nbnodes, 3), dtype=np.float32)
+        uvs = np.empty((d_nbnodes, 2), dtype=np.float32)
+        norms = np.empty((d_nbnodes, 3), dtype=np.float32)
+        tris = np.empty((d_nbtriangles, 3), dtype=np.int32)
+
+        # Single pass: fetch every node and its UV together, accumulate bounds.
+        Umin = Umax = Vmin = Vmax = None
         # Build normals
         d_nbnodes = facing.NbNodes()
         for t in range(1, d_nbnodes + 1):
             # pt = tab.Value(t)
+            idx = t - 1
             pt = facing.Node(t)
             loc = b_XYZ(pt)
 
@@ -697,32 +705,54 @@ class ReadSTEP:
             # pt_surf = GeomAPI_ProjectPointOnSurf(pt, nsurf)
             # fU, fV = pt_surf.Parameters(1)
             # prop = GeomLProp_SLProps(nsurf, fU, fV, 2, gp.Resolution_s())
+            verts[idx, 0] = pt.X()
+            verts[idx, 1] = pt.Y()
+            verts[idx, 2] = pt.Z()
 
             uv = facing.UVNode(t)
             u, v = uv.X(), uv.Y()
             uvs.append((u, v))
 
-            # The edges of UV give invalid normals, hence this
+            # Accumulate UV bounds (fix: previously Umax/Vmax were never updated)
+            if Umin is None:
+                Umin = Umax = u
+                Vmin = Vmax = v
+            else:
+                if u < Umin:
+                    Umin = u
+                elif u > Umax:
+                    Umax = u
+                if v < Vmin:
+                    Vmin = v
+                elif v > Vmax:
+                    Vmax = v
+
+        Ucenter = (Umin + Umax) * 0.5
+        Vcenter = (Vmin + Vmax) * 0.5
+
+        # Build normals using the already-cached UVs
+        for i in range(d_nbnodes):
+            u, v = uvs[i]
+            # The edges of UV give invalid normals, hence this nudge
             prop.SetParameters(
                 (u - Ucenter) * 0.999 + Ucenter, (v - Vcenter) * 0.999 + Vcenter
             )
 
             if prop.IsNormalDefined():
                 normal = prop.Normal().Transformed(itform)
-                # normal = prop.Normal()
-                nn = np.array(b_XYZ(normal))
-                if face.Orientation() == TopAbs_REVERSED:
-                    nn = -nn
+                norms[i, 0] = normal.X()
+                norms[i, 1] = normal.Y()
+                norms[i, 2] = normal.Z()
+                if is_reversed:
+                    norms[i] = -norms[i]
             else:
-                nn = np.array((0.0, 0.0, 1.0))
+                norms[i] = np.array([0.0, 0.0, 1.0], dtype=np.float32)
                 undef_normals = True
-
-            # norms.append(tuple(float(nnn) for nnn in nn))
-            norms.append(np.float32(nn))
 
         # Build triangulation
         d_nbtriangles = facing.NbTriangles()
         for t in range(1, d_nbtriangles + 1):
+            idx = t - 1
             T1, T2, T3 = tri(t).Get()
 
             if face.Orientation() != TopAbs_FORWARD:
@@ -732,7 +762,9 @@ class ReadSTEP:
             # nf = bm.faces.new(v_list)
             # nf.smooth = True
             # nf.normal_update()
-            tris.append((T1 - 1, T2 - 1, T3 - 1))
+            tris[idx, 0] = T1 - 1
+            tris[idx, 1] = T2 - 1
+            tris[idx, 2] = T3 - 1
 
             # for v in (T1, T2, T3):
             #     if norms[v - 1] is None:

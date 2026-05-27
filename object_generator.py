@@ -3,7 +3,6 @@ import time
 import numpy as np
 import bmesh
 import bpy
-from collections import defaultdict
 from .trimesh import TriMesh
 from .utils import (
     add_material,
@@ -476,9 +475,6 @@ def load_step(
 
                 created_objs.append(obj)
                 created_names[shape_name] = obj
-
-                # bpy.ops.object.mode_set(mode="OBJECT")
-                # build_mesh(step_reader, obj, shp, lin_deflection, ang_deflection)
 
         # No shape in leaf, empty creation enabled, do this
         elif hierarchy_empties:

@@ -159,7 +159,15 @@ class TriMesh:
                 t.indices[2] + offset,
             )
             self.tris.append(
-                TriData(shifted, t.norms, t.uvs, t.color, t.material, t.material_name, t.batch)
+                TriData(
+                    shifted,
+                    t.norms,
+                    t.uvs,
+                    t.color,
+                    t.material,
+                    t.material_name,
+                    t.batch,
+                )
             )
 
     def add_mesh_overwrite_identical(self, other):
@@ -253,7 +261,7 @@ class TriMesh:
             if self.tris[t].color == None:
                 self.tris[t].color = undef_color
 
-    def add_to_bm(self, bm, edges_as_seams=False, discontinuity_as_sharp=False):
+    def add_verts_to_bm(self, bm):
         "ASSUMPTION: empty BMesh"
         assert len(bm.faces) == 0
         assert len(bm.verts) == 0
@@ -264,97 +272,7 @@ class TriMesh:
             nv.index = vi
             verts.append(nv)
 
-        if self.tris:
-            for ti, t in enumerate(self.tris):
-                nf = bm.faces.new((verts[i] for i in t.indices))
-                nf.index = ti
-
-            # mark all non-manifold edges as seams
-            if edges_as_seams:
-                for e in bm.edges:
-                    f = e.link_faces
-                    # TODO: is batch indexing broken?
-                    if (
-                        len(f) == 2
-                        and self.tris[f[0].index].batch != self.tris[f[1].index].batch
-                    ):
-                        e.seam = True
-                    # if not e.is_manifold:
-                    #     e.seam = True
-
-            # gather all normals based on vert index
-            # compare dot products for those gathered
-            # if above threshold, vert index discontinuity = true
-            # go through edges and based on vert indices match mark as sharp
-
-            def _project_plane_normalize(plane, vec):
-                # if False:
-                #     l0 = np.linalg.norm(plane)
-                #     l1 = np.linalg.norm(vec)
-                #     assert l0 > 0.99 and l0 < 1.01
-                #     assert l1 > 0.99 and l1 < 1.01
-                prj = vec - (plane * np.dot(plane, vec))
-                prjn = np.linalg.norm(prj)
-                if prjn == 0.0:
-                    prj = np.array([0.0, 0.0, 1.0])
-                else:
-                    prj /= prjn
-                return prj
-
-            def _face_normals_disagree_on_edge_plane(plane, norms, margin):
-                # Project norms to plane: norm - (plane * dot(plane, norm))
-                # .. and calc dots
-                p0 = _project_plane_normalize(plane, norms[0])
-                dmax = 1.0
-                for i in norms[1:]:
-                    prj = _project_plane_normalize(plane, i)
-                    dd = np.dot(p0, prj)
-                    if dd < dmax:
-                        dmax = dd
-                if dmax < 1.0 - margin:
-                    return True
-                return False
-
-            if discontinuity_as_sharp:
-                # TODO: promote margin to an actual function input/parameter
-                margin = 0.02
-
-                # norms_in_vert = defaultdict(list)
-                # for t in self.tris:
-                #     for ni, n in enumerate(t.norms):
-                #         norms_in_vert[t.indices[ni]].append(n)
-
-                # Needs to be based on (2) face verts of the edge, not all faces of vert
-                for e in bm.edges:
-                    fi = [f.index for f in e.link_faces]
-                    if len(fi) != 2:
-                        continue
-
-                    t0, t1 = self.tris[fi[0]], self.tris[fi[1]]
-
-                    # find connected face filtered norms for edge verts
-                    # TODO: maybe optimize this, (test if all are clockwise)
-                    e_norms = [[], []]
-                    for i in range(3):
-                        if t0.indices[i] == e.verts[0].index:
-                            e_norms[0].append(t0.norms[i])
-                        if t1.indices[i] == e.verts[0].index:
-                            e_norms[0].append(t1.norms[i])
-                        if t0.indices[i] == e.verts[1].index:
-                            e_norms[1].append(t0.norms[i])
-                        if t1.indices[i] == e.verts[1].index:
-                            e_norms[1].append(t1.norms[i])
-
-                    # Check the dots on plane defined by the edge as normal
-                    plane = np.array((e.verts[0].co - e.verts[1].co).normalized())
-                    if _face_normals_disagree_on_edge_plane(
-                        plane, e_norms[0], margin
-                    ) and _face_normals_disagree_on_edge_plane(
-                        plane, e_norms[1], margin
-                    ):
-                        e.smooth = False
-                    else:
-                        e.smooth = True
+        return verts # temp, for transition
 
     def get_loop_colors(self):
         "Return colors in triangle loop creation order"

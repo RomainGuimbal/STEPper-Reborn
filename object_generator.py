@@ -270,6 +270,99 @@ def shape_size(shp):
     return diag
 
 
+def mark_edges(trimesh, bm, verts, edges_as_seams, discontinuity_as_sharp):
+    for ti, t in enumerate(trimesh.tris):
+        nf = bm.faces.new((verts[i] for i in t.indices))
+        nf.index = ti
+
+    # mark all non-manifold edges as seams
+    if edges_as_seams:
+        for e in bm.edges:
+            f = e.link_faces
+            # TODO: is batch indexing broken?
+            if (
+                len(f) == 2
+                and trimesh.tris[f[0].index].batch != trimesh.tris[f[1].index].batch
+            ):
+                e.seam = True
+            # if not e.is_manifold:
+            #     e.seam = True
+
+    # gather all normals based on vert index
+    # compare dot products for those gathered
+    # if above threshold, vert index discontinuity = true
+    # go through edges and based on vert indices match mark as sharp
+
+    def _project_plane_normalize(plane, vec):
+        # if False:
+        #     l0 = np.linalg.norm(plane)
+        #     l1 = np.linalg.norm(vec)
+        #     assert l0 > 0.99 and l0 < 1.01
+        #     assert l1 > 0.99 and l1 < 1.01
+        prj = vec - (plane * np.dot(plane, vec))
+        prjn = np.linalg.norm(prj)
+        if prjn == 0.0:
+            prj = np.array([0.0, 0.0, 1.0])
+        else:
+            prj /= prjn
+        return prj
+
+    def _face_normals_disagree_on_edge_plane(plane, norms, margin):
+        # Project norms to plane: norm - (plane * dot(plane, norm))
+        # .. and calc dots
+        p0 = _project_plane_normalize(plane, norms[0])
+        dmax = 1.0
+        for i in norms[1:]:
+            prj = _project_plane_normalize(plane, i)
+            dd = np.dot(p0, prj)
+            if dd < dmax:
+                dmax = dd
+        if dmax < 1.0 - margin:
+            return True
+        return False
+
+    if discontinuity_as_sharp:
+        # TODO: promote margin to an actual function input/parameter
+        margin = 0.02
+
+        # norms_in_vert = defaultdict(list)
+        # for t in self.tris:
+        #     for ni, n in enumerate(t.norms):
+        #         norms_in_vert[t.indices[ni]].append(n)
+
+        # Needs to be based on (2) face verts of the edge, not all faces of vert
+        for e in bm.edges:
+            fi = [f.index for f in e.link_faces]
+            if len(fi) != 2:
+                continue
+
+            t0, t1 = trimesh.tris[fi[0]], trimesh.tris[fi[1]]
+
+            # find connected face filtered norms for edge verts
+            # TODO: maybe optimize this, (test if all are clockwise)
+            e_norms = [[], []]
+            for i in range(3):
+                if t0.indices[i] == e.verts[0].index:
+                    e_norms[0].append(t0.norms[i])
+                if t1.indices[i] == e.verts[0].index:
+                    e_norms[0].append(t1.norms[i])
+                if t0.indices[i] == e.verts[1].index:
+                    e_norms[1].append(t0.norms[i])
+                if t1.indices[i] == e.verts[1].index:
+                    e_norms[1].append(t1.norms[i])
+
+            # Check the dots on plane defined by the edge as normal
+            plane = np.array((e.verts[0].co - e.verts[1].co).normalized())
+            if _face_normals_disagree_on_edge_plane(
+                plane, e_norms[0], margin
+            ) and _face_normals_disagree_on_edge_plane(
+                plane, e_norms[1], margin
+            ):
+                e.smooth = False
+            else:
+                e.smooth = True
+
+
 def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
     hacks = set([])
     if bpy.context.scene.stepper.hack_skip_zero_solids:
@@ -283,33 +376,38 @@ def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
     import time
     start_time = time.time()
 
-    mesh: TriMesh = step_reader.build_trimesh(
+    trimesh: TriMesh = step_reader.build_trimesh(
         shp, lin_def=lind, ang_def=angd, hacks=hacks
     )
 
     end_time = time.time()
     print(f"Trimesh build time: {end_time - start_time:.2f} seconds")
 
-    mesh.fuse_verts()
-    mesh.filter_zero_area()
-    mesh.filter_same_face()
+    trimesh.fuse_verts()
+    trimesh.filter_zero_area()
+    trimesh.filter_same_face()
 
-    print(f"[bm] {len(mesh.verts)}", end="")
+    print(f"[bm] {len(trimesh.verts)}", end="")
     bm = bmesh.new()
-    mesh.add_to_bm(bm, edges_as_seams=True, discontinuity_as_sharp=True)
-    mesh.fill_empty_color()
+    verts = trimesh.add_verts_to_bm(bm)
+    trimesh.fill_empty_color()
+
+    if trimesh.tris:
+        mark_edges(trimesh, bm, verts, edges_as_seams=True, discontinuity_as_sharp=True)
+
+
     bpy_update_object_data(
         obj.data,
         bm,
         vcol_name,
-        mesh.get_loop_colors(),
-        mesh.get_loop_uvs(),
-        mesh.get_loop_normals(),
-        mesh.get_loop_material_names(),
+        trimesh.get_loop_colors(),
+        trimesh.get_loop_uvs(),
+        trimesh.get_loop_normals(),
+        trimesh.get_loop_material_names(),
         build_materials=bpy.context.scene.stepper.build_materials,
     )
 
-    return mesh.matrix
+    return trimesh.matrix
 
 
 def build_nurbs(step_reader, shp, name):

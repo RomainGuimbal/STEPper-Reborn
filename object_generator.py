@@ -391,7 +391,6 @@ def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
     if trimesh.tris:
         mark_edges(trimesh, bm, edges_as_seams=True, discontinuity_as_sharp=True)
 
-
     bpy_update_object_data(
         obj.data,
         bm,

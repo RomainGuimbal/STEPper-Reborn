@@ -200,6 +200,7 @@ def mark_edges(trimesh, bm, edges_as_seams, discontinuity_as_sharp):
                 if t1.indices[i] == e.verts[1].index:
                     e_norms[1].append(t1.norms[i])
 
+<<<<<<< Updated upstream
             # Check the dots on plane defined by the edge as normal
             plane = np.array((e.verts[0].co - e.verts[1].co).normalized())
             if _face_normals_disagree_on_edge_plane(
@@ -208,9 +209,169 @@ def mark_edges(trimesh, bm, edges_as_seams, discontinuity_as_sharp):
                 e.smooth = False
             else:
                 e.smooth = True
+=======
+        # move to cursor position
+        mat[0][3] += cursor_pos.x
+        mat[1][3] += cursor_pos.y
+        mat[2][3] += cursor_pos.z
+
+        # apply
+        set_obj_matrix_world(obj, mat)
+
+    # Apply scale
+    # for obj in created_objs:
+    #     # Apply object scale
+    #     obj.select_set(True)
+    #     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    #     obj.select_set(False)
+
+    # for obj in created_objs:
+    #     obj.select_set(True)
 
 
-def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
+# from OCP.AIS import AIS_Shape
+
+
+# def shape_size(shp):
+#     bb = AIS_Shape(shp).BoundingBox()
+#     if bb.IsVoid():
+#         return 1.0
+#     diag = (bb.CornerMax().Distance(bb.CornerMin())) / 100000
+#     return diag
+>>>>>>> Stashed changes
+
+
+def is_vert_sharp_vectorized(edge_dirs, norms_a, norms_b, margin_sq):
+    dot_ab = np.einsum("ij,ij->i", norms_a, norms_b)
+    ea = np.einsum("ij,ij->i", edge_dirs, norms_a)
+    eb = np.einsum("ij,ij->i", edge_dirs, norms_b)
+
+    proj_dot = dot_ab - ea * eb
+    len_sq_a = 1.0 - ea * ea
+    len_sq_b = 1.0 - eb * eb
+
+    # not sharp if either normal is too small
+    are_too_small = np.logical_or(np.less(len_sq_a, 1e-12), np.less(len_sq_b, 1e-12))
+
+    over_margin = np.less((proj_dot * proj_dot), margin_sq * len_sq_a * len_sq_b)
+    return np.logical_and(over_margin, np.logical_not(are_too_small))
+
+
+def find_seams(trimesh, face_pair_of_edges):
+    """
+        Mark boundaries between different shape batches
+    """ 
+    batches = [t.batch for t in trimesh.tris] #TODO: make it a mono-block array of TriMesh
+    is_seam = np.bool(
+        [batches[lf[0]] != batches[lf[1]] for lf in face_pair_of_edges]
+    )
+    return is_seam
+
+
+def find_sharp(ob_data, trimesh, face_pair_of_edges, margin):
+    # Sharp edges: mark where per-vertex normals are discontinuous
+    ## Pre-build face_vert_norms[face_idx][global_vert_idx] = norm to replace
+    ## the inner range(3) scan with O(1) dict lookups.
+
+    # Normals at verts of each triangle
+    face_vert_norms = [
+        {t.indices[j]: t.norms[j] for j in range(3)} for t in trimesh.tris
+    ]
+
+    # get vert normals for 2 faces of the edge
+    norms_face1 = [
+        face_vert_norms[lf[0]] for lf in face_pair_of_edges
+    ]
+    norms_face2 = [
+        face_vert_norms[lf[1]] for lf in face_pair_of_edges
+    ]
+
+    # Vert ids of each edge
+    edge_verts = np.empty(len(ob_data.edges) * 2, dtype=np.int32)
+    ob_data.edges.foreach_get("vertices", edge_verts)
+    edge_verts = edge_verts.reshape(-1, 2)  # transpose
+
+    # Vert positions
+    coords = np.empty(len(ob_data.vertices) * 3, dtype=np.float32)
+    ob_data.vertices.foreach_get("co", coords)
+    coords = coords.reshape(-1, 3)
+
+    # Edge verts positions
+    vert_co_0 = np.empty((len(ob_data.edges),3), dtype=np.float32)
+    vert_co_1 = np.empty((len(ob_data.edges),3), dtype=np.float32)
+    for i in range(ob_data.edges):
+        vert_co_0[i] = coords[edge_verts[i, 0]]
+        vert_co_1[i] = coords[edge_verts[i, 1]]
+
+    get_fallback = lambda a: (a if a is not None else np.zeros(3, dtype=np.float32))
+
+    # Get normals for each face of each vertex of each edge
+    norm_face1_vert1 = np.empty((len(ob_data.edges),2,3), dtype=np.float32)
+    for e in ob_data.edges :
+        []
+
+    
+    norm_face1_vert1 = np.float32(
+        [get_fallback(norms_face1[i].get(v)) for i, v in enumerate(vert1_ex)]
+    )
+    norm_face2_vert1 = np.float32(
+        [get_fallback(norms_face2[i].get(v)) for i, v in enumerate(vert1_ex)]
+    )
+    norm_face1_vert2 = np.float32(
+        [get_fallback(norms_face1[i].get(v)) for i, v in enumerate(vert2_ex)]
+    )
+    norm_face2_vert2 = np.float32(
+        [get_fallback(norms_face2[i].get(v)) for i, v in enumerate(vert2_ex)]
+    )
+
+    edge_dir = vert_co_0 - vert_co_1
+
+    margin_sq = (1 - margin) ** 2
+    is_vert1_sharp = is_vert_sharp_vectorized(
+        edge_dir, norm_face1_vert1, norm_face2_vert1, margin_sq
+    )
+    is_vert2_sharp = is_vert_sharp_vectorized(
+        edge_dir, norm_face1_vert2, norm_face2_vert2, margin_sq
+    )
+    is_sharp = np.logical_and(is_vert1_sharp, is_vert2_sharp)
+
+    return is_sharp
+
+
+def mark_edges(objdata, trimesh: TriMesh, discontinuity_as_sharp, margin=0.02):
+    # Face pair of edges
+    foe = faces_of_edges(objdata)
+    face_pair_of_edges = np.zeros((len(objdata.edges),2), dtype=np.int32)
+    for i in range(face_pair_of_edges):
+        foei = foe[i]
+        if len(foei)==2:
+            face_pair_of_edges[i, 0] = foei[0]
+            face_pair_of_edges[i, 1] = foei[1]
+    
+    # Compute attributes
+    is_seam = find_seams(trimesh, face_pair_of_edges)
+    if discontinuity_as_sharp:
+        is_sharp = find_sharp(trimesh, face_pair_of_edges, margin)
+
+    # Create attributes
+    if "uv_seam" not in objdata.attributes:
+        objdata.attributes.new(name="uv_seam", type="BOOLEAN", domain="EDGE")
+    if discontinuity_as_sharp and "sharp_edge" not in objdata.attributes :
+        objdata.attributes.new(name="sharp_edge", type="BOOLEAN", domain="EDGE")
+    objdata.update()
+
+    # Get attributes
+    seam_att = objdata.attributes["uv_seam"]
+    if discontinuity_as_sharp :
+        sharp_att = objdata.attributes["sharp_edge"]
+
+    # Set attributes
+    seam_att.data.foreach_set("value", is_seam)
+    if discontinuity_as_sharp :
+        sharp_att.data.foreach_set("value", is_sharp)
+
+
+def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors", discontinuity_as_sharp = True):
     hacks = set([])
     if bpy.context.scene.stepper.hack_skip_zero_solids:
         hacks.add("skip_solids")

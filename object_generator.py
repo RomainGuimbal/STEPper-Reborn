@@ -5,69 +5,14 @@ import bmesh
 import bpy
 
 from .trimesh import TriMesh
+from .utils import add_material, set_obj_matrix_world, obj_unlink_all, transform_to_up
 
 GLOBAL_FILE_CACHE = {}
-
-def scalemat(mat, sl):
-    scaling = np.zeros_like(mat)
-    scaling[np.diag_indices(4)] = sl
-    # print(scaling)
-    return np.matmul(scaling, mat)
-
-
-def obj_unlink_all(obj):
-    """Unlink object from all collections"""
-    old_col = obj.users_collection
-
-    # bugfix: not in master collection bug
-    # collection_name.objects.unlink(obj)
-    if len(old_col) > 0:
-        for c in old_col:
-            c.objects.unlink(obj)
-
-
-def add_material(name, color, link_vertex_color=False, overwrite=False):
-    assert len(color) == 3
-    assert isinstance(color, tuple)
-    if len(name) > 60:
-        name = name[:60]
-    if name not in bpy.data.materials.keys() or overwrite:
-        mat = bpy.data.materials.new(name)
-        mat.use_nodes = True
-
-        # TODO: If language is set to slovensky, this will fail
-        # seems to not be issue for other languages tested so far
-        # bsdf = mat.node_tree.nodes["Principled BSDF"]
-        for node in mat.node_tree.nodes:
-            if node.type == "BSDF_PRINCIPLED":
-                bsdf = node
-                break
-
-        # Set base color
-        bsdf.inputs["Base Color"].default_value = (*color, 1.0)
-
-        # # Connect alpha
-        # a = mat.node_tree.nodes["Principled BSDF"].inputs["Alpha"]
-        # mat.node_tree.links.new(sn.outputs["Alpha"], a)
-
-        vcol = mat.node_tree.nodes.new(type="ShaderNodeVertexColor")
-        vcol.location = [-400.0, 200.0]
-        vcol.layer_name = "Colors"
-
-        if link_vertex_color:
-            mat.node_tree.links.new(vcol.outputs[0], bsdf.inputs[0])
-    else:
-        mat = bpy.data.materials[name]
-
-    # mat.blend_method = "BLEND"
-    # mat.shadow_method = "CLIP"
-    # mat.node_tree.nodes["Image Texture"].image = image
-    return mat
 
 
 def bpy_update_object_data(
     objdata, bm, vcol_name, colors, uvs, norms, mat_names, build_materials=True
-):  
+):
     # Already existing object materials
     if build_materials:
         # set colors and mats
@@ -158,15 +103,6 @@ def calculate_detail_level(dlev):
     return 0.8, l_def
 
 
-def set_obj_matrix_world(obj, mtx):
-    """
-    Copy Numpy matrix into Blender matrix
-    """
-    for row in range(mtx.shape[0]):
-        for col in range(mtx.shape[1]):
-            obj.matrix_world[row][col] = mtx[row][col]
-
-
 def create_new_obj_with_mesh(name, set_active=True):
     """
     Create new empty object and mesh, link them, and optionally set to active
@@ -200,74 +136,6 @@ def choose_hierarchy_types(htypes):
         assert False, "Invalid input parameter"
 
     return hierarchy_flat, hierarchy_tree, hierarchy_empties
-
-
-def transform_to_up(up, chosen_objects, scale, to_cursor=True):
-    """
-    Set all chosen_objects transforms <up>["X", "Y", "Z"] as up
-    Optionally move to cursor <to_cursor>
-    Set scale to scale
-    """
-
-    # transforms and processing of objects
-    # bpy.ops.object.select_all(action="DESELECT")
-
-    cursor_pos = bpy.context.scene.cursor.location
-
-    # up
-    # up_as = self.up_as
-    up_axis = {"X": 0, "Y": 1, "Z": 2}[up]
-
-    # forward
-    # fw_as = self.prg.fw_as
-    # fw_axis = {"X": 0, "Y": 1, "Z": 2}[fw_as[0]]
-
-    for obj in chosen_objects:
-        # up, forward
-        mat = np.array(obj.matrix_world)
-
-        # blender default: Y(1) = forward, Z(2) = up
-        if up_axis != 2:
-            # if negate axis, do mirror
-            # if up_as[1] == "N":
-            #     dg = [1, 1, 1, 1]
-            #     dg[up_axis] = -1
-            #     mat = _scalemat(mat, dg)
-
-            mat[[up_axis, 2]] = mat[[2, up_axis]]
-            mat[up_axis] *= -1
-
-        # scale
-        mat = scalemat(mat, [*([scale] * 3), 1])
-
-        # move to cursor position
-        mat[0][3] += cursor_pos.x
-        mat[1][3] += cursor_pos.y
-        mat[2][3] += cursor_pos.z
-
-        # apply
-        set_obj_matrix_world(obj, mat)
-
-    # Apply scale
-    # for obj in created_objs:
-    #     # Apply object scale
-    #     obj.select_set(True)
-    #     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    #     obj.select_set(False)
-
-    # for obj in created_objs:
-    #     obj.select_set(True)
-
-
-from OCP.AIS import AIS_Shape
-
-
-def shape_size(shp):
-    bb = AIS_Shape(shp).BoundingBox()
-    if bb.IsVoid():
-        return 1.0
-    diag = (bb.CornerMax().Distance(bb.CornerMin())) / 100000
-    return diag
 
 
 def mark_edges(trimesh, bm, edges_as_seams, discontinuity_as_sharp):
@@ -351,9 +219,7 @@ def mark_edges(trimesh, bm, edges_as_seams, discontinuity_as_sharp):
             plane = np.array((e.verts[0].co - e.verts[1].co).normalized())
             if _face_normals_disagree_on_edge_plane(
                 plane, e_norms[0], margin
-            ) and _face_normals_disagree_on_edge_plane(
-                plane, e_norms[1], margin
-            ):
+            ) and _face_normals_disagree_on_edge_plane(plane, e_norms[1], margin):
                 e.smooth = False
             else:
                 e.smooth = True
@@ -370,6 +236,7 @@ def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
     #     angd *= size
 
     import time
+
     start_time = time.time()
 
     trimesh: TriMesh = step_reader.build_trimesh(
@@ -559,7 +426,9 @@ def load_step(
         # Shape found in leaf
         if shp:
             print(
-                "\nBuilding ({}/{}): {} ".format(i + 1, total, obj_name), end="", flush=True
+                "\nBuilding ({}/{}): {} ".format(i + 1, total, obj_name),
+                end="",
+                flush=True,
             )
             print("[T" + repr(shp.ShapeType()) + "]", end="", flush=True)
 

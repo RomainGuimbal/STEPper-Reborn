@@ -162,7 +162,7 @@ def vert_coordinates_of_edges(mesh: bpy.types.Mesh, edge_verts):
     # Edge verts positions
     vert_co_0 = np.empty((len(mesh.edges), 3), dtype=np.float32)
     vert_co_1 = np.empty((len(mesh.edges), 3), dtype=np.float32)
-    for i in range(mesh.edges):
+    for i in range(len(mesh.edges)):
         vert_co_0[i] = coords[edge_verts[i, 0]]
         vert_co_1[i] = coords[edge_verts[i, 1]]
     
@@ -183,7 +183,7 @@ def faces_of_edges(mesh: bpy.types.Mesh):
     loop_to_poly = np.repeat(np.arange(len(mesh.polygons)), loop_total)
 
     # edge index -> list of poly indices
-    faces_of_edges = []*len(mesh.edges)
+    faces_of_edges = [[] for _ in range(len(mesh.edges))]
     for loop_i, edge_i in enumerate(loop_edge):
         faces_of_edges[edge_i].append(loop_to_poly[loop_i])
 

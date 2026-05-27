@@ -1,4 +1,5 @@
 import numpy as np
+import bpy
 
 
 def make_tri_hash(f):
@@ -261,20 +262,8 @@ class TriMesh:
             if self.tris[t].color == None:
                 self.tris[t].color = undef_color
 
-    def add_to_bm(self, bm):
-        "ASSUMPTION: empty BMesh"
-        assert len(bm.faces) == 0
-        assert len(bm.verts) == 0
-
-        verts = []
-        for vi, v in enumerate(self.verts):
-            nv = bm.verts.new(v)
-            nv.index = vi
-            verts.append(nv)
-
-        for ti, t in enumerate(self.tris):
-            nf = bm.faces.new((verts[i] for i in t.indices))
-            nf.index = ti
+    def add_to_mesh(self, mesh: bpy.types.Mesh):
+        mesh.from_pydata(self.verts, [], [t.indices for t in self.tris])
 
     def get_loop_colors(self):
         "Return colors in triangle loop creation order"

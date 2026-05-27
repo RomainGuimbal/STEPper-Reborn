@@ -166,11 +166,12 @@ def find_sharp(ob_data, trimesh, face_pair_of_edges, margin):
         for ni, n in enumerate(t.norms):
             norms_of_vert[t.indices[ni]].append(n)
 
-    # get vert normals for 2 faces of the edge
+    # get vert normals for the 2 faces of the edge
     norms_face1 = [norms_of_vert[lf[0]] for lf in face_pair_of_edges]
     norms_face2 = [norms_of_vert[lf[1]] for lf in face_pair_of_edges]
 
-    get_fallback = lambda a: (a if a is not None else np.zeros(3, dtype=np.float32))
+    # Vert ids of each edge
+    edge_verts = vert_of_edges(ob_data)
 
     # Get normals for each face of each vertex of each edge
     norm_face1_vert1 = np.empty((len(ob_data.edges), 2, 3), dtype=np.float32)
@@ -178,19 +179,16 @@ def find_sharp(ob_data, trimesh, face_pair_of_edges, margin):
     norm_face1_vert2 = np.empty((len(ob_data.edges), 2, 3), dtype=np.float32)
     norm_face2_vert2 = np.empty((len(ob_data.edges), 2, 3), dtype=np.float32)
 
-    # Vert ids of each edge
-    edge_verts = vert_of_edges(ob_data)
-
-    # Normals of vert and face of the edge
-    for i, e in enumerate(ob_data.edges):
-        v1, v2 = edge_verts[e]
+    get_fallback = lambda a: (a if a is not None else np.zeros(3, dtype=np.float32))
+    for i in range(len(ob_data.edges)):
+        v1, v2 = edge_verts[i]
         norm_face1_vert1[i] = get_fallback(norms_face1[i].get(v1))
         norm_face2_vert1[i] = get_fallback(norms_face2[i].get(v1))
         norm_face1_vert2[i] = get_fallback(norms_face1[i].get(v2))
         norm_face2_vert2[i] = get_fallback(norms_face2[i].get(v2))
 
     # Edge normal plane's normal vector
-    vert_co_0, vert_co_1 = vert_coordinates_of_edges(ob_data)
+    vert_co_0, vert_co_1 = vert_coordinates_of_edges(ob_data, edge_verts)
     edge_dir = vert_co_0 - vert_co_1
 
     # margin squared is used for faster computation
@@ -213,7 +211,7 @@ def mark_edges(objdata, trimesh: TriMesh, seams, sharp, margin=0.02):
     # Face pair of edges
     foe = faces_of_edges(objdata)
     face_pair_of_edges = np.zeros((len(objdata.edges), 2), dtype=np.int32)
-    for i in range(face_pair_of_edges):
+    for i in range(len(face_pair_of_edges)):
         foei = foe[i]
         if len(foei) == 2:
             face_pair_of_edges[i, 0] = foei[0]
@@ -225,7 +223,7 @@ def mark_edges(objdata, trimesh: TriMesh, seams, sharp, margin=0.02):
         if "uv_seam" not in objdata.attributes:
             objdata.attributes.new(name="uv_seam", type="BOOLEAN", domain="EDGE")
     if sharp:
-        is_sharp = find_sharp(trimesh, face_pair_of_edges, margin)
+        is_sharp = find_sharp(objdata, trimesh, face_pair_of_edges, margin)
         if "sharp_edge" not in objdata.attributes:
             objdata.attributes.new(name="sharp_edge", type="BOOLEAN", domain="EDGE")
     objdata.update()
@@ -267,12 +265,10 @@ def build_mesh(
     trimesh.fuse_verts()
     trimesh.filter_zero_area()
     trimesh.filter_same_face()
-
-    print(f"[bm] {len(trimesh.verts)}", end="")
-    bm = bmesh.new()
-    trimesh.add_to_bm(bm)
     trimesh.fill_empty_color()
-
+    trimesh.add_to_mesh(obj.data)
+    obj.data.update()
+    
     if trimesh.tris:
         mark_edges(
             obj.data, trimesh, edges_as_seams, discontinuity_as_sharp, margin=0.02

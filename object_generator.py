@@ -20,8 +20,11 @@ GLOBAL_FILE_CACHE = {}
 
 
 def bpy_update_object_data(
-    objdata, bm, vcol_name, colors, uvs, norms, mat_names, build_materials=True
+    objdata, vcol_name, colors, uvs, norms, mat_names, build_materials=True
 ):
+    bm = bmesh.new()   # create an empty BMesh
+    bm.from_mesh(objdata)
+
     # Already existing object materials
     if build_materials:
         # set colors and mats
@@ -92,6 +95,7 @@ def bpy_update_object_data(
 
     # Update mesh from Bmesh
     bm.to_mesh(objdata)
+    bm.free()
 
     if len(norms) > 0:
         # Apply normals to mesh if they exist
@@ -159,28 +163,33 @@ def find_seams(trimesh, face_pair_of_edges):
 
 def find_sharp(ob_data, trimesh, face_pair_of_edges, margin):
     # Sharp edges: mark where per-vertex normals are discontinuous
+    edge_count = len(ob_data.edges)
 
-    # for each vertex, stores all normals
-    norms_of_vert = defaultdict(list)
-    for t in trimesh.tris:
-        for ni, n in enumerate(t.norms):
-            norms_of_vert[t.indices[ni]].append(n)
+    # for each tris, stores all normals of the 3 vertices
+    face_vert_norms = [
+        {
+            face.indices[0]: face.norms[0],
+            face.indices[1]: face.norms[1],
+            face.indices[2]: face.norms[2],
+        }
+        for face in trimesh.tris
+    ]
 
-    # get vert normals for the 2 faces of the edge
-    norms_face1 = [norms_of_vert[lf[0]] for lf in face_pair_of_edges]
-    norms_face2 = [norms_of_vert[lf[1]] for lf in face_pair_of_edges]
+    # get the 3 verts normals for the 2 faces of each edges
+    norms_face1 = [face_vert_norms[f1] for f1, _ in face_pair_of_edges]
+    norms_face2 = [face_vert_norms[f2] for _, f2 in face_pair_of_edges]
 
     # Vert ids of each edge
     edge_verts = vert_of_edges(ob_data)
 
     # Get normals for each face of each vertex of each edge
-    norm_face1_vert1 = np.empty((len(ob_data.edges), 2, 3), dtype=np.float32)
-    norm_face2_vert1 = np.empty((len(ob_data.edges), 2, 3), dtype=np.float32)
-    norm_face1_vert2 = np.empty((len(ob_data.edges), 2, 3), dtype=np.float32)
-    norm_face2_vert2 = np.empty((len(ob_data.edges), 2, 3), dtype=np.float32)
+    norm_face1_vert1 = np.empty((edge_count, 3), dtype=np.float32)
+    norm_face2_vert1 = np.empty((edge_count, 3), dtype=np.float32)
+    norm_face1_vert2 = np.empty((edge_count, 3), dtype=np.float32)
+    norm_face2_vert2 = np.empty((edge_count, 3), dtype=np.float32)
 
     get_fallback = lambda a: (a if a is not None else np.zeros(3, dtype=np.float32))
-    for i in range(len(ob_data.edges)):
+    for i in range(edge_count):
         v1, v2 = edge_verts[i]
         norm_face1_vert1[i] = get_fallback(norms_face1[i].get(v1))
         norm_face2_vert1[i] = get_fallback(norms_face2[i].get(v1))
@@ -268,7 +277,7 @@ def build_mesh(
     trimesh.fill_empty_color()
     trimesh.add_to_mesh(obj.data)
     obj.data.update()
-    
+
     if trimesh.tris:
         mark_edges(
             obj.data, trimesh, edges_as_seams, discontinuity_as_sharp, margin=0.02

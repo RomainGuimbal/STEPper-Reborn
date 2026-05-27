@@ -146,26 +146,26 @@ def add_material(name, color, link_vertex_color=False, overwrite=False):
     return mat
 
 
-# def faces_of_edges(mesh: bpy.types.Mesh):
-#     # Loop data
-#     loop_edge = np.empty(len(mesh.loops), dtype=np.int32)
-#     mesh.loops.foreach_get("edge_index", loop_edge)
+def faces_of_edges(mesh: bpy.types.Mesh):
+    # Loop data
+    loop_edge = np.empty(len(mesh.loops), dtype=np.int32)
+    mesh.loops.foreach_get("edge_index", loop_edge)
 
-#     # Poly data
-#     loop_total = np.empty(len(mesh.polygons), dtype=np.int32)
-#     loop_start = np.empty(len(mesh.polygons), dtype=np.int32)
-#     mesh.polygons.foreach_get("loop_total", loop_total)
-#     mesh.polygons.foreach_get("loop_start", loop_start)
+    # Poly data
+    loop_total = np.empty(len(mesh.polygons), dtype=np.int32)
+    loop_start = np.empty(len(mesh.polygons), dtype=np.int32)
+    mesh.polygons.foreach_get("loop_total", loop_total)
+    mesh.polygons.foreach_get("loop_start", loop_start)
 
-#     # loop index -> poly index
-#     loop_to_poly = np.repeat(np.arange(len(mesh.polygons)), loop_total)
+    # loop index -> poly index
+    loop_to_poly = np.repeat(np.arange(len(mesh.polygons)), loop_total)
 
-#     # edge index -> list of poly indices
-#     faces_of_edges = []*len(mesh.edges)
-#     for loop_i, edge_i in enumerate(loop_edge):
-#         faces_of_edges[edge_i].append(loop_to_poly[loop_i])
+    # edge index -> list of poly indices
+    faces_of_edges = []*len(mesh.edges)
+    for loop_i, edge_i in enumerate(loop_edge):
+        faces_of_edges[edge_i].append(loop_to_poly[loop_i])
 
-#     return faces_of_edges
+    return faces_of_edges
 
 
 # from OCP.AIS import AIS_Shape

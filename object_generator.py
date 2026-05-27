@@ -11,6 +11,7 @@ from .utils import (
     obj_unlink_all,
     transform_to_up,
     create_new_obj_with_mesh,
+    faces_of_edges,
 )
 
 GLOBAL_FILE_CACHE = {}
@@ -122,95 +123,229 @@ def choose_hierarchy_types(htypes):
 
     return hierarchy_flat, hierarchy_tree, hierarchy_empties
 
+# def is_vert_sharp_vectorized(edge_dirs, norms_a, norms_b, margin_sq):
+#     dot_ab = np.einsum("ij,ij->i", norms_a, norms_b)
+#     ea = np.einsum("ij,ij->i", edge_dirs, norms_a)
+#     eb = np.einsum("ij,ij->i", edge_dirs, norms_b)
 
-def mark_edges(trimesh, bm, edges_as_seams, discontinuity_as_sharp):
+#     proj_dot = dot_ab - ea * eb
+#     len_sq_a = 1.0 - ea * ea
+#     len_sq_b = 1.0 - eb * eb
+
+#     # not sharp if either normal is too small
+#     are_too_small = np.logical_or(np.less(len_sq_a, 1e-12), np.less(len_sq_b, 1e-12))
+
+#     over_margin = np.less((proj_dot * proj_dot), margin_sq * len_sq_a * len_sq_b)
+#     return np.logical_and(over_margin, np.logical_not(are_too_small))
+
+
+# def find_seams(trimesh, face_pair_of_edges):
+#     """
+#     Mark boundaries between different shape batches
+#     """
+#     batches = [
+#         t.batch for t in trimesh.tris
+#     ]  # TODO: make it a mono-block array of TriMesh
+#     is_seam = np.bool([batches[lf[0]] != batches[lf[1]] for lf in face_pair_of_edges])
+#     return is_seam
+
+def find_seams(trimesh, bm):
     # mark all non-manifold edges as seams
-    if edges_as_seams:
-        for e in bm.edges:
-            f = e.link_faces
-            # TODO: is batch indexing broken?
-            if (
-                len(f) == 2
-                and trimesh.tris[f[0].index].batch != trimesh.tris[f[1].index].batch
-            ):
-                e.seam = True
-            # if not e.is_manifold:
-            #     e.seam = True
+    for e in bm.edges:
+        f = e.link_faces
+        # TODO: is batch indexing broken?
+        if (
+            len(f) == 2
+            and trimesh.tris[f[0].index].batch != trimesh.tris[f[1].index].batch
+        ):
+            e.seam = True
+        # if not e.is_manifold:
+        #     e.seam = True
 
+# def find_sharp(ob_data, trimesh, face_pair_of_edges, margin):
+#     # Sharp edges: mark where per-vertex normals are discontinuous
+#     ## Pre-build face_vert_norms[face_idx][global_vert_idx] = norm to replace
+#     ## the inner range(3) scan with O(1) dict lookups.
+
+#     # Normals at verts of each triangle
+#     face_vert_norms = [
+#         {t.indices[j]: t.norms[j] for j in range(3)} for t in trimesh.tris
+#     ]
+
+#     # get vert normals for 2 faces of the edge
+#     norms_face1 = [face_vert_norms[lf[0]] for lf in face_pair_of_edges]
+#     norms_face2 = [face_vert_norms[lf[1]] for lf in face_pair_of_edges]
+
+#     # Vert ids of each edge
+#     edge_verts = np.empty(len(ob_data.edges) * 2, dtype=np.int32)
+#     ob_data.edges.foreach_get("vertices", edge_verts)
+#     edge_verts = edge_verts.reshape(-1, 2)  # transpose
+
+#     # Vert positions
+#     coords = np.empty(len(ob_data.vertices) * 3, dtype=np.float32)
+#     ob_data.vertices.foreach_get("co", coords)
+#     coords = coords.reshape(-1, 3)
+
+#     # Edge verts positions
+#     vert_co_0 = np.empty((len(ob_data.edges), 3), dtype=np.float32)
+#     vert_co_1 = np.empty((len(ob_data.edges), 3), dtype=np.float32)
+#     for i in range(ob_data.edges):
+#         vert_co_0[i] = coords[edge_verts[i, 0]]
+#         vert_co_1[i] = coords[edge_verts[i, 1]]
+
+#     get_fallback = lambda a: (a if a is not None else np.zeros(3, dtype=np.float32))
+
+#     # Get normals for each face of each vertex of each edge
+#     norm_face1_vert1 = np.empty((len(ob_data.edges), 2, 3), dtype=np.float32)
+#     for e in ob_data.edges:
+#         []
+
+#     norm_face1_vert1 = np.float32(
+#         [get_fallback(norms_face1[i].get(v)) for i, v in enumerate(vert1_ex)]
+#     )
+#     norm_face2_vert1 = np.float32(
+#         [get_fallback(norms_face2[i].get(v)) for i, v in enumerate(vert1_ex)]
+#     )
+#     norm_face1_vert2 = np.float32(
+#         [get_fallback(norms_face1[i].get(v)) for i, v in enumerate(vert2_ex)]
+#     )
+#     norm_face2_vert2 = np.float32(
+#         [get_fallback(norms_face2[i].get(v)) for i, v in enumerate(vert2_ex)]
+#     )
+
+#     edge_dir = vert_co_0 - vert_co_1
+
+#     margin_sq = (1 - margin) ** 2
+#     is_vert1_sharp = is_vert_sharp_vectorized(
+#         edge_dir, norm_face1_vert1, norm_face2_vert1, margin_sq
+#     )
+#     is_vert2_sharp = is_vert_sharp_vectorized(
+#         edge_dir, norm_face1_vert2, norm_face2_vert2, margin_sq
+#     )
+#     is_sharp = np.logical_and(is_vert1_sharp, is_vert2_sharp)
+
+#     return is_sharp
+   
+
+def _project_plane_normalize(plane, vec):
+    # if False:
+    #     l0 = np.linalg.norm(plane)
+    #     l1 = np.linalg.norm(vec)
+    #     assert l0 > 0.99 and l0 < 1.01
+    #     assert l1 > 0.99 and l1 < 1.01
+    prj = vec - (plane * np.dot(plane, vec))
+    prjn = np.linalg.norm(prj)
+    if prjn == 0.0:
+        prj = np.array([0.0, 0.0, 1.0])
+    else:
+        prj /= prjn
+    return prj
+
+def _face_normals_disagree_on_edge_plane(plane, norms, margin):
+    # Project norms to plane: norm - (plane * dot(plane, norm))
+    # .. and calc dots
+    p0 = _project_plane_normalize(plane, norms[0])
+    dmax = 1.0
+    for i in norms[1:]:
+        prj = _project_plane_normalize(plane, i)
+        dd = np.dot(p0, prj)
+        if dd < dmax:
+            dmax = dd
+    if dmax < 1.0 - margin:
+        return True
+    return False
+
+
+def find_sharp(trimesh, bm, margin):
     # gather all normals based on vert index
     # compare dot products for those gathered
     # if above threshold, vert index discontinuity = true
     # go through edges and based on vert indices match mark as sharp
 
-    def _project_plane_normalize(plane, vec):
-        # if False:
-        #     l0 = np.linalg.norm(plane)
-        #     l1 = np.linalg.norm(vec)
-        #     assert l0 > 0.99 and l0 < 1.01
-        #     assert l1 > 0.99 and l1 < 1.01
-        prj = vec - (plane * np.dot(plane, vec))
-        prjn = np.linalg.norm(prj)
-        if prjn == 0.0:
-            prj = np.array([0.0, 0.0, 1.0])
+    # norms_in_vert = defaultdict(list)
+    # for t in self.tris:
+    #     for ni, n in enumerate(t.norms):
+    #         norms_in_vert[t.indices[ni]].append(n)
+
+    # Needs to be based on (2) face verts of the edge, not all faces of vert
+    for e in bm.edges:
+        fi = [f.index for f in e.link_faces]
+        if len(fi) != 2:
+            continue
+
+        t0, t1 = trimesh.tris[fi[0]], trimesh.tris[fi[1]]
+
+        # find connected face filtered norms for edge verts
+        # TODO: maybe optimize this, (test if all are clockwise)
+        e_norms = [[], []]
+        for i in range(3):
+            if t0.indices[i] == e.verts[0].index:
+                e_norms[0].append(t0.norms[i])
+            if t1.indices[i] == e.verts[0].index:
+                e_norms[0].append(t1.norms[i])
+            if t0.indices[i] == e.verts[1].index:
+                e_norms[1].append(t0.norms[i])
+            if t1.indices[i] == e.verts[1].index:
+                e_norms[1].append(t1.norms[i])
+
+        # Check the dots on plane defined by the edge as normal
+        plane = np.array((e.verts[0].co - e.verts[1].co).normalized())
+        if _face_normals_disagree_on_edge_plane(
+            plane, e_norms[0], margin
+        ) and _face_normals_disagree_on_edge_plane(plane, e_norms[1], margin):
+            e.smooth = False
         else:
-            prj /= prjn
-        return prj
-
-    def _face_normals_disagree_on_edge_plane(plane, norms, margin):
-        # Project norms to plane: norm - (plane * dot(plane, norm))
-        # .. and calc dots
-        p0 = _project_plane_normalize(plane, norms[0])
-        dmax = 1.0
-        for i in norms[1:]:
-            prj = _project_plane_normalize(plane, i)
-            dd = np.dot(p0, prj)
-            if dd < dmax:
-                dmax = dd
-        if dmax < 1.0 - margin:
-            return True
-        return False
-
-    if discontinuity_as_sharp:
-        # TODO: promote margin to an actual function input/parameter
-        margin = 0.02
-
-        # norms_in_vert = defaultdict(list)
-        # for t in self.tris:
-        #     for ni, n in enumerate(t.norms):
-        #         norms_in_vert[t.indices[ni]].append(n)
-
-        # Needs to be based on (2) face verts of the edge, not all faces of vert
-        for e in bm.edges:
-            fi = [f.index for f in e.link_faces]
-            if len(fi) != 2:
-                continue
-
-            t0, t1 = trimesh.tris[fi[0]], trimesh.tris[fi[1]]
-
-            # find connected face filtered norms for edge verts
-            # TODO: maybe optimize this, (test if all are clockwise)
-            e_norms = [[], []]
-            for i in range(3):
-                if t0.indices[i] == e.verts[0].index:
-                    e_norms[0].append(t0.norms[i])
-                if t1.indices[i] == e.verts[0].index:
-                    e_norms[0].append(t1.norms[i])
-                if t0.indices[i] == e.verts[1].index:
-                    e_norms[1].append(t0.norms[i])
-                if t1.indices[i] == e.verts[1].index:
-                    e_norms[1].append(t1.norms[i])
-
-            # Check the dots on plane defined by the edge as normal
-            plane = np.array((e.verts[0].co - e.verts[1].co).normalized())
-            if _face_normals_disagree_on_edge_plane(
-                plane, e_norms[0], margin
-            ) and _face_normals_disagree_on_edge_plane(plane, e_norms[1], margin):
-                e.smooth = False
-            else:
-                e.smooth = True
+            e.smooth = True
 
 
-def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
+
+
+
+def mark_edges(objdata, trimesh: TriMesh, seams, sharp, margin=0.02):
+    if not(seams or sharp):
+        return
+    
+    # Face pair of edges
+    foe = faces_of_edges(objdata)
+    face_pair_of_edges = np.zeros((len(objdata.edges), 2), dtype=np.int32)
+    for i in range(face_pair_of_edges):
+        foei = foe[i]
+        if len(foei) == 2:
+            face_pair_of_edges[i, 0] = foei[0]
+            face_pair_of_edges[i, 1] = foei[1]
+
+    # Compute and createattributes
+    if seams :
+        is_seam = find_seams(trimesh, face_pair_of_edges)
+        if "uv_seam" not in objdata.attributes:
+            objdata.attributes.new(name="uv_seam", type="BOOLEAN", domain="EDGE")
+    if sharp:
+        is_sharp = find_sharp(trimesh, face_pair_of_edges, margin)
+        if "sharp_edge" not in objdata.attributes:
+            objdata.attributes.new(name="sharp_edge", type="BOOLEAN", domain="EDGE")
+    objdata.update()
+
+    # Get and Set attributes
+    if seams :
+        seam_att = objdata.attributes["uv_seam"]
+        seam_att.data.foreach_set("value", is_seam)
+    if sharp:
+        sharp_att = objdata.attributes["sharp_edge"]
+        sharp_att.data.foreach_set("value", is_sharp)
+
+        
+
+
+def build_mesh(
+    step_reader,
+    obj,
+    shp,
+    lind,
+    angd,
+    vcol_name="Colors",
+    edges_as_seams=True,
+    discontinuity_as_sharp=True,
+):
     hacks = set([])
     if bpy.context.scene.stepper.hack_skip_zero_solids:
         hacks.add("skip_solids")
@@ -236,8 +371,9 @@ def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
     trimesh.fill_empty_color()
 
     if trimesh.tris:
-        mark_edges(obj.data, trimesh, edges_as_seams=True, discontinuity_as_sharp=True, margin=0.02)
->>>>>>> Stashed changes
+        mark_edges(
+            obj.data, trimesh, edges_as_seams, discontinuity_as_sharp, margin=0.02
+        )
 
     bpy_update_object_data(
         obj.data,

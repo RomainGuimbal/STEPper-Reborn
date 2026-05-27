@@ -3,71 +3,28 @@ import time
 import numpy as np
 import bmesh
 import bpy
-
+from collections import defaultdict
 from .trimesh import TriMesh
+from .utils import (
+    add_material,
+    set_obj_matrix_world,
+    obj_unlink_all,
+    transform_to_up,
+    create_new_obj_with_mesh,
+    faces_of_edges,
+    vert_coordinates_of_edges,
+    vert_of_edges,
+)
 
 GLOBAL_FILE_CACHE = {}
 
-def scalemat(mat, sl):
-    scaling = np.zeros_like(mat)
-    scaling[np.diag_indices(4)] = sl
-    # print(scaling)
-    return np.matmul(scaling, mat)
-
-
-def obj_unlink_all(obj):
-    """Unlink object from all collections"""
-    old_col = obj.users_collection
-
-    # bugfix: not in master collection bug
-    # collection_name.objects.unlink(obj)
-    if len(old_col) > 0:
-        for c in old_col:
-            c.objects.unlink(obj)
-
-
-def add_material(name, color, link_vertex_color=False, overwrite=False):
-    assert len(color) == 3
-    assert isinstance(color, tuple)
-    if len(name) > 60:
-        name = name[:60]
-    if name not in bpy.data.materials.keys() or overwrite:
-        mat = bpy.data.materials.new(name)
-        mat.use_nodes = True
-
-        # TODO: If language is set to slovensky, this will fail
-        # seems to not be issue for other languages tested so far
-        # bsdf = mat.node_tree.nodes["Principled BSDF"]
-        for node in mat.node_tree.nodes:
-            if node.type == "BSDF_PRINCIPLED":
-                bsdf = node
-                break
-
-        # Set base color
-        bsdf.inputs["Base Color"].default_value = (*color, 1.0)
-
-        # # Connect alpha
-        # a = mat.node_tree.nodes["Principled BSDF"].inputs["Alpha"]
-        # mat.node_tree.links.new(sn.outputs["Alpha"], a)
-
-        vcol = mat.node_tree.nodes.new(type="ShaderNodeVertexColor")
-        vcol.location = [-400.0, 200.0]
-        vcol.layer_name = "Colors"
-
-        if link_vertex_color:
-            mat.node_tree.links.new(vcol.outputs[0], bsdf.inputs[0])
-    else:
-        mat = bpy.data.materials[name]
-
-    # mat.blend_method = "BLEND"
-    # mat.shadow_method = "CLIP"
-    # mat.node_tree.nodes["Image Texture"].image = image
-    return mat
-
 
 def bpy_update_object_data(
-    objdata, bm, vcol_name, colors, uvs, norms, mat_names, build_materials=True
-):  
+    objdata, vcol_name, colors, uvs, norms, mat_names, build_materials=True
+):
+    bm = bmesh.new()   # create an empty BMesh
+    bm.from_mesh(objdata)
+
     # Already existing object materials
     if build_materials:
         # set colors and mats
@@ -138,6 +95,7 @@ def bpy_update_object_data(
 
     # Update mesh from Bmesh
     bm.to_mesh(objdata)
+    bm.free()
 
     if len(norms) > 0:
         # Apply normals to mesh if they exist
@@ -147,36 +105,6 @@ def bpy_update_object_data(
         # Filter removed items from norms
         # norms = [n for ni, n in enumerate(norms) if ni not in removed]
         objdata.normals_split_custom_set(np.array(norms))
-
-
-def calculate_detail_level(dlev):
-    """Angular deflection, Linear deflection"""
-    if dlev < 100:
-        l_def = 100.0 / float(dlev)
-    else:
-        l_def = (100.0 / float(dlev)) ** 2.0
-    return 0.8, l_def
-
-
-def set_obj_matrix_world(obj, mtx):
-    """
-    Copy Numpy matrix into Blender matrix
-    """
-    for row in range(mtx.shape[0]):
-        for col in range(mtx.shape[1]):
-            obj.matrix_world[row][col] = mtx[row][col]
-
-
-def create_new_obj_with_mesh(name, set_active=True):
-    """
-    Create new empty object and mesh, link them, and optionally set to active
-    """
-    empty_mesh = bpy.data.meshes.new(name)
-    obj = bpy.data.objects.new(name, empty_mesh)
-    bpy.context.collection.objects.link(obj)
-    if set_active:
-        bpy.context.view_layer.objects.active = obj
-    return obj
 
 
 def choose_hierarchy_types(htypes):
@@ -202,114 +130,170 @@ def choose_hierarchy_types(htypes):
     return hierarchy_flat, hierarchy_tree, hierarchy_empties
 
 
-def transform_to_up(up, chosen_objects, scale, to_cursor=True):
+def project_and_compare_normals(proj_plane_normal, norms_a, norms_b, margin_sq):
     """
-    Set all chosen_objects transforms <up>["X", "Y", "Z"] as up
-    Optionally move to cursor <to_cursor>
-    Set scale to scale
+    Normals are projected and compared.
+    Vectorized.
+    Computation is simplified so it doesn't resemble a direct projection with normalized vectors.
     """
+    dot_ab = np.einsum("ij,ij->i", norms_a, norms_b)
+    ea = np.einsum("ij,ij->i", proj_plane_normal, norms_a)
+    eb = np.einsum("ij,ij->i", proj_plane_normal, norms_b)
 
-    # transforms and processing of objects
-    # bpy.ops.object.select_all(action="DESELECT")
+    proj_dot = dot_ab - ea * eb
+    len_sq_a = 1.0 - ea * ea
+    len_sq_b = 1.0 - eb * eb
 
-    cursor_pos = bpy.context.scene.cursor.location
+    # not sharp if either normal is too small
+    are_too_small = np.logical_or(np.less(len_sq_a, 1e-12), np.less(len_sq_b, 1e-12))
 
-    # up
-    # up_as = self.up_as
-    up_axis = {"X": 0, "Y": 1, "Z": 2}[up]
-
-    # forward
-    # fw_as = self.prg.fw_as
-    # fw_axis = {"X": 0, "Y": 1, "Z": 2}[fw_as[0]]
-
-    for obj in chosen_objects:
-        # up, forward
-        mat = np.array(obj.matrix_world)
-
-        # blender default: Y(1) = forward, Z(2) = up
-        if up_axis != 2:
-            # if negate axis, do mirror
-            # if up_as[1] == "N":
-            #     dg = [1, 1, 1, 1]
-            #     dg[up_axis] = -1
-            #     mat = _scalemat(mat, dg)
-
-            mat[[up_axis, 2]] = mat[[2, up_axis]]
-            mat[up_axis] *= -1
-
-        # scale
-        mat = scalemat(mat, [*([scale] * 3), 1])
-
-        # move to cursor position
-        mat[0][3] += cursor_pos.x
-        mat[1][3] += cursor_pos.y
-        mat[2][3] += cursor_pos.z
-
-        # apply
-        set_obj_matrix_world(obj, mat)
-
-    # Apply scale
-    # for obj in created_objs:
-    #     # Apply object scale
-    #     obj.select_set(True)
-    #     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    #     obj.select_set(False)
-
-    # for obj in created_objs:
-    #     obj.select_set(True)
+    over_margin = np.less((proj_dot * proj_dot), margin_sq * len_sq_a * len_sq_b)
+    return np.logical_and(over_margin, np.logical_not(are_too_small))
 
 
-from OCP.AIS import AIS_Shape
+def find_seams(trimesh, face_pair_of_edges):
+    """
+    Mark boundaries between different shape batches
+    """
+    # TODO: make batches a mono-block array of TriMesh
+    batches = [t.batch for t in trimesh.tris]
+    is_seam = np.bool([batches[f1] != batches[f2] for f1, f2 in face_pair_of_edges])
+    return is_seam
 
 
-def shape_size(shp):
-    bb = AIS_Shape(shp).BoundingBox()
-    if bb.IsVoid():
-        return 1.0
-    diag = (bb.CornerMax().Distance(bb.CornerMin())) / 100000
-    return diag
+def find_sharp(ob_data, trimesh, face_pair_of_edges, margin):
+    # Sharp edges: mark where per-vertex normals are discontinuous
+    edge_count = len(ob_data.edges)
+
+    # for each tris, stores all normals of the 3 vertices
+    face_vert_norms = [
+        {
+            face.indices[0]: face.norms[0],
+            face.indices[1]: face.norms[1],
+            face.indices[2]: face.norms[2],
+        }
+        for face in trimesh.tris
+    ]
+
+    # get the 3 verts normals for the 2 faces of each edges
+    norms_face1 = [face_vert_norms[f1] for f1, _ in face_pair_of_edges]
+    norms_face2 = [face_vert_norms[f2] for _, f2 in face_pair_of_edges]
+
+    # Vert ids of each edge
+    edge_verts = vert_of_edges(ob_data)
+
+    # Get normals for each face of each vertex of each edge
+    norm_face1_vert1 = np.empty((edge_count, 3), dtype=np.float32)
+    norm_face2_vert1 = np.empty((edge_count, 3), dtype=np.float32)
+    norm_face1_vert2 = np.empty((edge_count, 3), dtype=np.float32)
+    norm_face2_vert2 = np.empty((edge_count, 3), dtype=np.float32)
+
+    get_fallback = lambda a: (a if a is not None else np.zeros(3, dtype=np.float32))
+    for i in range(edge_count):
+        v1, v2 = edge_verts[i]
+        norm_face1_vert1[i] = get_fallback(norms_face1[i].get(v1))
+        norm_face2_vert1[i] = get_fallback(norms_face2[i].get(v1))
+        norm_face1_vert2[i] = get_fallback(norms_face1[i].get(v2))
+        norm_face2_vert2[i] = get_fallback(norms_face2[i].get(v2))
+
+    # Edge normal plane's normal vector
+    vert_co_0, vert_co_1 = vert_coordinates_of_edges(ob_data, edge_verts)
+    edge_dir = vert_co_0 - vert_co_1
+
+    # margin squared is used for faster computation
+    margin_sq = (1 - margin) ** 2
+    is_vert1_sharp = project_and_compare_normals(
+        edge_dir, norm_face1_vert1, norm_face2_vert1, margin_sq
+    )
+    is_vert2_sharp = project_and_compare_normals(
+        edge_dir, norm_face1_vert2, norm_face2_vert2, margin_sq
+    )
+    is_sharp = np.logical_and(is_vert1_sharp, is_vert2_sharp)
+
+    return is_sharp
 
 
-def build_mesh(step_reader, obj, shp, lind, angd, vcol_name="Colors"):
+def mark_edges(objdata, trimesh: TriMesh, seams, sharp, margin=0.02):
+    if not (seams or sharp):
+        return
+
+    # Face pair of edges
+    foe = faces_of_edges(objdata)
+    face_pair_of_edges = np.zeros((len(objdata.edges), 2), dtype=np.int32)
+    for i in range(len(face_pair_of_edges)):
+        foei = foe[i]
+        if len(foei) == 2:
+            face_pair_of_edges[i, 0] = foei[0]
+            face_pair_of_edges[i, 1] = foei[1]
+
+    # Compute and createattributes
+    if seams:
+        is_seam = find_seams(trimesh, face_pair_of_edges)
+        if "uv_seam" not in objdata.attributes:
+            objdata.attributes.new(name="uv_seam", type="BOOLEAN", domain="EDGE")
+    if sharp:
+        is_sharp = find_sharp(objdata, trimesh, face_pair_of_edges, margin)
+        if "sharp_edge" not in objdata.attributes:
+            objdata.attributes.new(name="sharp_edge", type="BOOLEAN", domain="EDGE")
+    objdata.update()
+
+    # Get and Set attributes
+    if seams:
+        seam_att = objdata.attributes["uv_seam"]
+        seam_att.data.foreach_set("value", is_seam)
+    if sharp:
+        sharp_att = objdata.attributes["sharp_edge"]
+        sharp_att.data.foreach_set("value", is_sharp)
+
+
+def build_mesh(
+    step_reader,
+    obj,
+    shp,
+    lind,
+    angd,
+    vcol_name="Colors",
+    edges_as_seams=True,
+    discontinuity_as_sharp=True,
+):
     hacks = set([])
     if bpy.context.scene.stepper.hack_skip_zero_solids:
         hacks.add("skip_solids")
 
-    # adaptative = bpy.context.scene.stepper.use_adaptive_resolution
-    # if adaptative :
-    #     size = shape_size(shp)
-    #     angd *= size
-
     import time
+
     start_time = time.time()
 
-    mesh: TriMesh = step_reader.build_trimesh(
+    trimesh: TriMesh = step_reader.build_trimesh(
         shp, lin_def=lind, ang_def=angd, hacks=hacks
     )
 
     end_time = time.time()
     print(f"Trimesh build time: {end_time - start_time:.2f} seconds")
 
-    mesh.fuse_verts()
-    mesh.filter_zero_area()
-    mesh.filter_same_face()
+    trimesh.fuse_verts()
+    trimesh.filter_zero_area()
+    trimesh.filter_same_face()
+    trimesh.fill_empty_color()
+    trimesh.add_to_mesh(obj.data)
+    obj.data.update()
 
-    print(f"[bm] {len(mesh.verts)}", end="")
-    bm = bmesh.new()
-    mesh.add_to_bm(bm, edges_as_seams=True, discontinuity_as_sharp=True)
-    mesh.fill_empty_color()
+    if trimesh.tris:
+        mark_edges(
+            obj.data, trimesh, edges_as_seams, discontinuity_as_sharp, margin=0.02
+        )
+
     bpy_update_object_data(
         obj.data,
-        bm,
         vcol_name,
-        mesh.get_loop_colors(),
-        mesh.get_loop_uvs(),
-        mesh.get_loop_normals(),
-        mesh.get_loop_material_names(),
+        trimesh.get_loop_colors(),
+        trimesh.get_loop_uvs(),
+        trimesh.get_loop_normals(),
+        trimesh.get_loop_material_names(),
         build_materials=bpy.context.scene.stepper.build_materials,
     )
 
-    return mesh.matrix
+    return trimesh.matrix
 
 
 def build_nurbs(step_reader, shp, name):
@@ -466,7 +450,9 @@ def load_step(
         # Shape found in leaf
         if shp:
             print(
-                "\nBuilding ({}/{}): {} ".format(i + 1, total, obj_name), end="", flush=True
+                "\nBuilding ({}/{}): {} ".format(i + 1, total, obj_name),
+                end="",
+                flush=True,
             )
             print("[T" + repr(shp.ShapeType()) + "]", end="", flush=True)
 

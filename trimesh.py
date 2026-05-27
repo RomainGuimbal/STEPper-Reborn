@@ -1,4 +1,5 @@
 import numpy as np
+import bpy
 
 
 def make_tri_hash(f):
@@ -34,7 +35,8 @@ class TriData:
 
 class TriMesh:
     """Triangle mesh. Array of triangles of which each item has three pointers
-    to locations inside array of verts. Each triangle data is defined through TriData class"""
+    to locations inside array of verts. Each triangle data is defined through TriData class
+    """
 
     def __init__(self, verts=None, tris=None, matrix=None):
 
@@ -149,16 +151,24 @@ class TriMesh:
 
     def add_mesh(self, other):
         # assert other is TriMesh
-        for i in range(len(other.tris)):
-            otr = other.tris[i]
-            self.add_tri(
-                [other.verts[t] for t in otr.indices],
-                otr.norms,
-                otr.color,
-                otr.material,
-                otr.material_name,
-                otr.uvs,
-                otr.batch,
+        offset = len(self.verts)
+        self.verts.extend(other.verts)
+        for t in other.tris:
+            shifted = (
+                t.indices[0] + offset,
+                t.indices[1] + offset,
+                t.indices[2] + offset,
+            )
+            self.tris.append(
+                TriData(
+                    shifted,
+                    t.norms,
+                    t.uvs,
+                    t.color,
+                    t.material,
+                    t.material_name,
+                    t.batch,
+                )
             )
 
     def add_mesh_overwrite_identical(self, other):
@@ -174,7 +184,9 @@ class TriMesh:
         self.verts += verts
         tri = (vc_s, vc_s + 1, vc_s + 2)
         self.tris.append(TriData(tri, norms, uvs, colors, material, mat_name, batch_id))
-        self.tri_hash[make_tri_hash([tuple(verts[i]) for i in range(3)])] = len(self.tris) - 1
+        self.tri_hash[make_tri_hash([tuple(verts[i]) for i in range(3)])] = (
+            len(self.tris) - 1
+        )
         assert self.verts[self.tris[-1].indices[0]] == verts[0]
         assert self.verts[self.tris[-1].indices[2]] == verts[2]
 
@@ -208,7 +220,9 @@ class TriMesh:
             # later batches overwrite earlier ones
             if batch_priority and (otr.color is not None):
                 overwrite = False
-                if (self.tris[tri].color is not None) and (self.tris[tri].batch < otr.batch):
+                if (self.tris[tri].color is not None) and (
+                    self.tris[tri].batch < otr.batch
+                ):
                     overwrite = True
                 else:
                     overwrite = True
@@ -248,101 +262,8 @@ class TriMesh:
             if self.tris[t].color == None:
                 self.tris[t].color = undef_color
 
-    def add_to_bm(self, bm, edges_as_seams=False, discontinuity_as_sharp=False):
-        "ASSUMPTION: empty BMesh"
-        assert len(bm.faces) == 0
-        assert len(bm.verts) == 0
-
-        verts = []
-        for vi, v in enumerate(self.verts):
-            nv = bm.verts.new(v)
-            nv.index = vi
-            verts.append(nv)
-
-        if self.tris:
-            for ti, t in enumerate(self.tris):
-                nf = bm.faces.new((verts[i] for i in t.indices))
-                nf.index = ti
-
-            # mark all non-manifold edges as seams
-            if edges_as_seams:
-                for e in bm.edges:
-                    f = e.link_faces
-                    # TODO: is batch indexing broken?
-                    if len(f) == 2 and self.tris[f[0].index].batch != self.tris[f[1].index].batch:
-                        e.seam = True
-                    # if not e.is_manifold:
-                    #     e.seam = True
-
-            # gather all normals based on vert index
-            # compare dot products for those gathered
-            # if above threshold, vert index discontinuity = true
-            # go through edges and based on vert indices match mark as sharp
-
-            def _project_plane_normalize(plane, vec):
-                if False:
-                    l0 = np.linalg.norm(plane)
-                    l1 = np.linalg.norm(vec)
-                    assert l0 > 0.99 and l0 < 1.01
-                    assert l1 > 0.99 and l1 < 1.01
-                prj = vec - (plane * np.dot(plane, vec))
-                prjn = np.linalg.norm(prj)
-                if prjn == 0.0:
-                    prj = np.array([0.0, 0.0, 1.0])
-                else:
-                    prj /= prjn
-                return prj
-
-            def _prjtest(plane, norms, margin):
-                # Project norms to plane: norm - (plane * dot(plane, norm))
-                # .. and calc dots
-                p0 = _project_plane_normalize(plane, norms[0])
-                dmax = 1.0
-                for i in norms[1:]:
-                    prj = _project_plane_normalize(plane, i)
-                    dd = np.dot(p0, prj)
-                    if dd < dmax:
-                        dmax = dd
-                if dmax < 1.0 - margin:
-                    return True
-                return False
-
-            if discontinuity_as_sharp:
-                # TODO: promote margin to an actual function input/parameter
-                margin = 0.02
-
-                # norms_in_vert = defaultdict(list)
-                # for t in self.tris:
-                #     for ni, n in enumerate(t.norms):
-                #         norms_in_vert[t.indices[ni]].append(n)
-
-                # Needs to be based on (2) face verts of the edge, not all faces of vert
-                for e in bm.edges:
-                    fi = [f.index for f in e.link_faces]
-                    if len(fi) != 2:
-                        continue
-
-                    t0, t1 = self.tris[fi[0]], self.tris[fi[1]]
-
-                    # find connected face filtered norms for edge verts
-                    # TODO: maybe optimize this, (test if all are clockwise)
-                    e_norms = [[], []]
-                    for i in range(3):
-                        if t0.indices[i] == e.verts[0].index:
-                            e_norms[0].append(t0.norms[i])
-                        if t1.indices[i] == e.verts[0].index:
-                            e_norms[0].append(t1.norms[i])
-                        if t0.indices[i] == e.verts[1].index:
-                            e_norms[1].append(t0.norms[i])
-                        if t1.indices[i] == e.verts[1].index:
-                            e_norms[1].append(t1.norms[i])
-
-                    # Check the dots on plane defined by the edge as normal
-                    plane = np.array((e.verts[0].co - e.verts[1].co).normalized())
-                    if _prjtest(plane, e_norms[0], margin) and _prjtest(plane, e_norms[1], margin):
-                        e.smooth = False
-                    else:
-                        e.smooth = True
+    def add_to_mesh(self, mesh: bpy.types.Mesh):
+        mesh.from_pydata(self.verts, [], [t.indices for t in self.tris])
 
     def get_loop_colors(self):
         "Return colors in triangle loop creation order"

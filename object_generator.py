@@ -3,6 +3,7 @@ import time
 import numpy as np
 import bmesh
 import bpy
+from enum import IntEnum
 from collections import defaultdict
 from .trimesh import TriMesh
 from .utils import (
@@ -19,10 +20,18 @@ from .utils import (
 GLOBAL_FILE_CACHE = {}
 
 
+class HierarchyType(IntEnum):
+    EMPTIES_TREE = 0
+    COLLECTION_FLAT = 1
+    COLLECTION_TREE = 2
+    COLLECTION_FLAT_AND_TREE = 3
+    COLLECTION_INSTANCES = 4
+
+
 def bpy_update_object_data(
     objdata, vcol_name, colors, uvs, norms, mat_names, build_materials=True
 ):
-    bm = bmesh.new()   # create an empty BMesh
+    bm = bmesh.new()  # create an empty BMesh
     bm.from_mesh(objdata)
 
     # Already existing object materials
@@ -105,29 +114,6 @@ def bpy_update_object_data(
         # Filter removed items from norms
         # norms = [n for ni, n in enumerate(norms) if ni not in removed]
         objdata.normals_split_custom_set(np.array(norms))
-
-
-def choose_hierarchy_types(htypes):
-    """
-    Return hierarchy types selection from input string
-    """
-    hierarchy_flat = False
-    hierarchy_tree = False
-    hierarchy_empties = False
-
-    if htypes == "FLAT_AND_TREE":
-        hierarchy_flat = True
-        hierarchy_tree = True
-    elif htypes == "TREE":
-        hierarchy_tree = True
-    elif htypes == "FLAT":
-        hierarchy_flat = True
-    elif htypes == "EMPTIES":
-        hierarchy_empties = True
-    else:
-        assert False, "Invalid input parameter"
-
-    return hierarchy_flat, hierarchy_tree, hierarchy_empties
 
 
 def project_and_compare_normals(proj_plane_normal, norms_a, norms_b, margin_sq):
@@ -385,6 +371,91 @@ def build_nurbs(step_reader, shp, name):
         return bpy.context.view_layer.objects.active
 
 
+def build_hierarchy_collection(tree, created_objs, filename):
+    tree_collection = bpy.data.collections.new(filename + ".hierarchy")
+    bpy.context.scene.collection.children.link(tree_collection)
+    hierarchy_collections = {}
+    hierarchy_collections[-1] = tree_collection
+
+    def node_parse(node, level, parent_collection):
+        # if "name" in node and node["children"] is not None:
+        if len(node.children) > 0:
+            collection_node = bpy.data.collections.new(node.name)
+            assert node.index not in hierarchy_collections
+            hierarchy_collections[node.index] = collection_node
+
+            parent_collection.children.link(collection_node)
+            for c in node.children:
+                node_parse(tree.nodes[c], level + 1, collection_node)
+
+    root = tree.nodes[0]
+    if len(root.children) > 0:
+        for c in root.children:
+            node_parse(tree.nodes[c], 0, tree_collection)
+
+        # link objects to tree
+        if len(hierarchy_collections.items()) > 0:
+            for obj in created_objs:
+                hierarchy_collections[obj["STEP_parent"]].objects.link(obj)
+                global_t = tree.nodes[obj["STEP_tree_location"]].global_transform
+                set_obj_matrix_world(obj, global_t)
+
+
+def build_hierarchy_empties(tree, created_objs, created_uuid):
+    for obj in created_objs:
+        global_t = tree.nodes[obj["STEP_tree_location"]].global_transform
+        set_obj_matrix_world(obj, global_t)
+        bpy.context.scene.collection.objects.link(obj)
+
+        # Parent objs
+        parent_id = obj["STEP_parent"]
+        if parent_id in created_uuid:
+            parent = created_uuid[parent_id]
+            obj.parent = parent
+            obj.matrix_parent_inverse = parent.matrix_world.inverted()
+
+
+def build_hierarchy_flat(tree, created_objs, filename):
+    flat_collection = bpy.data.collections.new(filename + ".flat")
+    bpy.context.scene.collection.children.link(flat_collection)
+
+    created_collections = {}
+    for obj in created_objs:
+        group_name = obj["STEP_name"]
+
+        # max collection name len = 61
+        if len(group_name) > 50:
+            group_name = group_name[:25] + "_" + group_name[-25:]
+
+        # TODO: check dupe collections for dupe imports
+        if group_name not in created_collections:
+            group_collection = bpy.data.collections.new(group_name)
+            created_collections[group_name] = group_collection
+            flat_collection.children.link(group_collection)
+        else:
+            group_collection = created_collections[group_name]
+
+        global_t = tree.nodes[obj["STEP_tree_location"]].global_transform
+        set_obj_matrix_world(obj, global_t)
+        group_collection.objects.link(obj)
+
+
+def build_hierarchy_instances(tree, created_objs, filename, instanced_objects):
+    # instance_collection = bpy.data.collections.new(filename + ".instances")
+    # bpy.context.scene.collection.children.link(instance_collection)
+
+    # for source_obj, instances_info in instanced_objects.items():
+    #     source_obj.select_set(True)
+    #     bpy.context.view_layer.objects.active = source_obj
+    #     bpy.ops.object.make_single_user(object=True, obdata=True)
+
+    #     for shape_name, local_t, global_t in instances_info:
+    #         obj = source_obj.copy()
+    #         set_obj_matrix_world(obj, global_t)
+    #         instance_collection.objects.link(obj)
+    pass
+
+
 def load_step(
     context,
     filepath,
@@ -393,11 +464,9 @@ def load_step(
     ang_deflection=0.5,
     # merge_distance=0.001,
     up_as="Y",
-    htypes="TREE",
+    htypes=HierarchyType.COLLECTION_TREE,
 ):
     from . import importer
-
-    hierarchy_flat, hierarchy_tree, hierarchy_empties = choose_hierarchy_types(htypes)
 
     filename = "".join(ntpath.basename(filepath).split(".")[:-1])
 
@@ -427,6 +496,7 @@ def load_step(
     created_objs = []
     created_names = {}
     created_uuid = {}
+    instanced_objects = {}  # {Original ref : [instances info]}
 
     # traverse shapes, render in "face" mode
     start_time = time.time()
@@ -461,8 +531,14 @@ def load_step(
                 print("[Link]", end="", flush=True)
 
                 source_obj = created_names[shape_name]
-                obj = source_obj.copy()
-                created_objs.append(obj)
+                if htypes == HierarchyType.COLLECTION_INSTANCES:
+                    instanced_objects[source_obj].append(
+                        (shape_name, local_t, global_t)
+                    )
+                else:
+                    obj = source_obj.copy()
+                    created_objs.append(obj)
+
             else:
                 print("[Build]", end="", flush=True)
 
@@ -481,7 +557,7 @@ def load_step(
                 # build_mesh(step_reader, obj, shp, lin_deflection, ang_deflection)
 
         # No shape in leaf, empty creation enabled, do this
-        elif hierarchy_empties:
+        elif htypes == HierarchyType.EMPTIES_TREE:
             # Create empty
             obj = bpy.data.objects.new(obj_name, None)
             obj.empty_display_size = 2
@@ -507,74 +583,18 @@ def load_step(
     for tobj in created_objs:
         obj_unlink_all(tobj)
 
-    # build flat collection
-    if hierarchy_flat:
-        flat_collection = bpy.data.collections.new(filename + ".flat")
-        bpy.context.scene.collection.children.link(flat_collection)
-
-        created_collections = {}
-        for obj in created_objs:
-            group_name = obj["STEP_name"]
-
-            # max collection name len = 61
-            if len(group_name) > 50:
-                group_name = group_name[:25] + "_" + group_name[-25:]
-
-            # TODO: check dupe collections for dupe imports
-            if group_name not in created_collections:
-                group_collection = bpy.data.collections.new(group_name)
-                created_collections[group_name] = group_collection
-                flat_collection.children.link(group_collection)
-            else:
-                group_collection = created_collections[group_name]
-
-            global_t = tree.nodes[obj["STEP_tree_location"]].global_transform
-            set_obj_matrix_world(obj, global_t)
-            group_collection.objects.link(obj)
-
-    # build tree of collections
-    if hierarchy_tree:
-        tree_collection = bpy.data.collections.new(filename + ".hierarchy")
-        bpy.context.scene.collection.children.link(tree_collection)
-        hierarchy_collections = {}
-        hierarchy_collections[-1] = tree_collection
-
-        def node_parse(node, level, parent_collection):
-            # if "name" in node and node["children"] is not None:
-            if len(node.children) > 0:
-                collection_node = bpy.data.collections.new(node.name)
-                assert node.index not in hierarchy_collections
-                hierarchy_collections[node.index] = collection_node
-
-                parent_collection.children.link(collection_node)
-                for c in node.children:
-                    node_parse(tree.nodes[c], level + 1, collection_node)
-
-        root = tree.nodes[0]
-        if len(root.children) > 0:
-            for c in root.children:
-                node_parse(tree.nodes[c], 0, tree_collection)
-
-            # link objects to tree
-            if len(hierarchy_collections.items()) > 0:
-                for obj in created_objs:
-                    hierarchy_collections[obj["STEP_parent"]].objects.link(obj)
-                    global_t = tree.nodes[obj["STEP_tree_location"]].global_transform
-                    set_obj_matrix_world(obj, global_t)
-
-    # build hierarchy with empties
-    if hierarchy_empties:
-        for obj in created_objs:
-            global_t = tree.nodes[obj["STEP_tree_location"]].global_transform
-            set_obj_matrix_world(obj, global_t)
-            bpy.context.scene.collection.objects.link(obj)
-
-            # Parent objs
-            parent_id = obj["STEP_parent"]
-            if parent_id in created_uuid:
-                parent = created_uuid[parent_id]
-                obj.parent = parent
-                obj.matrix_parent_inverse = parent.matrix_world.inverted()
+    match htypes:
+        case HierarchyType.COLLECTION_FLAT_AND_TREE:
+            build_hierarchy_flat(tree, created_objs, filename)
+            build_hierarchy_collection(tree, created_objs, filename)
+        case HierarchyType.COLLECTION_TREE:
+            build_hierarchy_collection(tree, created_objs, filename)
+        case HierarchyType.COLLECTION_FLAT:
+            build_hierarchy_flat(tree, created_objs, filename)
+        case HierarchyType.EMPTIES_TREE:
+            build_hierarchy_empties(tree, created_objs, created_uuid)
+        case HierarchyType.COLLECTION_INSTANCES:
+            build_hierarchy_instances(tree, created_objs, filename, instanced_objects)
 
     transform_to_up(up_as[0], created_objs, scale)
 

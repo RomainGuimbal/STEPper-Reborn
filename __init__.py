@@ -249,6 +249,9 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
         if self.override_file != "":
             import_files = [self.override_file]
 
+        ######################################
+        ######################################
+
         from viztracer import VizTracer
 
         with VizTracer(
@@ -270,8 +273,12 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
                     lin_deflection=l_def,
                     ang_deflection=a_def,
                     up_as=self.up_as,
-                    htypes=self.hierarchy_types,
+                    htypes=self.hierarchy_types,##### TO REPLACE HERE
                 )
+
+        ######################################
+        ######################################
+
         if result:
             return {"FINISHED"}
         else:

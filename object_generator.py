@@ -6,8 +6,7 @@ import numpy as np
 import bmesh
 import bpy
 from enum import IntEnum
-from collections import defaultdict
-from mathutils import Matrix, Vector
+from mathutils import Matrix
 from .trimesh import TriMesh
 from .utils import (
     add_material,
@@ -287,95 +286,6 @@ def build_mesh(
     return trimesh.matrix
 
 
-def build_nurbs(step_reader, shp, name):
-    nurbs_data = step_reader.build_nurbs(shp)
-    debug_faces = False
-    if debug_faces:
-        obj = create_new_obj_with_mesh(name)
-        bm = bmesh.new()
-        for nb in nurbs_data:
-            nb_u = nb.uv_points
-            uw, vw = len(nb_u), len(nb_u[0])
-            for u in range(uw - 1):
-                nb_v0 = nb_u[u]
-                nb_v1 = nb_u[u + 1]
-                for v in range(vw - 1):
-                    a = bm.verts.new(nb_v0[v].location())
-                    b = bm.verts.new(nb_v0[v + 1].location())
-                    c = bm.verts.new(nb_v1[v + 1].location())
-                    d = bm.verts.new(nb_v1[v].location())
-                    bm.faces.new((d, c, b, a))
-        prev_mode = bpy.context.object.mode
-        bm.to_mesh(obj.data)
-        # obj.display_type = 'WIRE'
-        return obj
-    else:
-        blender_nurbs = []
-        for nb in nurbs_data:
-            surface_data = bpy.data.curves.new("wook", "SURFACE")
-            surface_data.dimensions = "3D"
-
-            upoints = nb.uv_points
-
-            usize, vsize = len(upoints), len(upoints[0])
-
-            splines = []
-            for v in range(usize):
-                spline = surface_data.splines.new(type="NURBS")
-                spline.points.add(vsize - 1)
-                splines.append(spline)
-
-            for ui, vpoints in enumerate(upoints):
-                for vi, p in enumerate(vpoints):
-                    # points have weight attribute
-                    splines[ui].points[vi].co = p.as_vector()
-
-            blender_nurbs.append(surface_data)
-
-        # print(dir(nurbs[0].splines[0])) =>
-        # 'bezier_points', 'bl_rna', 'calc_length', 'character_index', 'hide', 'material_index',
-        # 'order_u', 'order_v', 'point_count_u', 'point_count_v', 'points', 'radius_interpolation',
-        # 'resolution_u', 'resolution_v', 'rna_type', 'tilt_interpolation', 'type', 'use_bezier_u',
-        # 'use_bezier_v', 'use_cyclic_u', 'use_cyclic_v', 'use_endpoint_u',
-        # 'use_endpoint_v', 'use_smooth'
-        created_objs = []
-        for ni, n in enumerate(blender_nurbs):
-            occ_nurb = nurbs_data[ni]
-            surface_object = bpy.data.objects.new(name, n)
-            bpy.context.collection.objects.link(surface_object)
-            for s in surface_object.data.splines:
-                for p in s.points:
-                    p.select = True
-
-            bpy.context.view_layer.objects.active = surface_object
-            prev_mode = bpy.context.object.mode
-            bpy.ops.object.mode_set(mode="EDIT")
-            bpy.ops.curve.make_segment()
-            bpy.ops.object.mode_set(mode=prev_mode)
-            created_objs.append(surface_object)
-
-        for obi, ob in enumerate(created_objs):
-            occ_nurb = nurbs_data[obi]
-            for s in ob.data.splines:
-                s.use_endpoint_u = True
-                s.use_endpoint_v = True
-                # s.use_endpoint_u = occ_nurb.u_closed
-                # s.use_endpoint_v = occ_nurb.v_closed
-                # s.use_cyclic_u = occ_nurb.u_periodic
-                # s.use_cyclic_v = occ_nurb.v_periodic
-                s.order_u = occ_nurb.u_degree + 1
-                s.order_v = occ_nurb.v_degree + 1
-                # print(s.order_u, s.order_v, occ_nurb.u_degree, occ_nurb.v_degree)
-
-        # Join objects
-        bpy.ops.object.mode_set(mode="OBJECT")
-        bpy.ops.object.select_all(action="DESELECT")
-        for o in created_objs:
-            o.select_set(True)
-        bpy.ops.object.join()
-        return bpy.context.view_layer.objects.active
-
-
 def build_hierarchy_collection(tree, created_objs, filename):
     tree_collection = bpy.data.collections.new(filename + ".hierarchy")
     bpy.context.scene.collection.children.link(tree_collection)
@@ -599,9 +509,6 @@ def load_step(
                 obj = create_new_obj_with_mesh(obj_name)
                 bpy.ops.object.mode_set(mode="OBJECT")
                 build_mesh(step_reader, obj, shp, lin_deflection, ang_deflection)
-
-                # TODO: nurbs changes here
-                # obj = build_nurbs(step_reader, shp, name)
 
                 created_objs.append(obj)
                 created_names[shape_name] = obj

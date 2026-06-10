@@ -21,6 +21,24 @@ class TrianglesData:
     uvs = []
     batch = []
 
+    def __init__(
+        self,
+        indices=[],
+        norms=[],
+        colors=[],
+        material=[],
+        material_name=[],
+        uvs=[],
+        batch=[],
+    ):
+        self.indices = indices
+        self.norms = norms
+        self.colors = colors
+        self.material = material
+        self.material_name = material_name
+        self.uvs = uvs
+        self.batch = batch
+
     def __getitem__(self, index):
         # Could also be a dictionary
         return (
@@ -58,10 +76,7 @@ class TrianglesData:
 
     def extend(self, other, offset):
         self.indices.extend(
-            [
-                (t.indices[0] + offset, t.indices[1] + offset, t.indices[2] + offset)
-                for t in other.indices
-            ]
+            [(tis[0] + offset, tis[1] + offset, tis[2] + offset) for tis in other.indices]
         )
         self.norms.extend(other.norms)
         self.uvs.extend(other.uvs)
@@ -79,7 +94,7 @@ class TriMesh:
     def __init__(self, verts=None, tris=None, matrix=None):
 
         if verts is None and tris is None:
-            self.tris = None  # type TrianglesData
+            self.tris = TrianglesData()
             self.verts = []
             self.matrix = np.empty((3, 4), dtype=np.float32)
 
@@ -126,8 +141,9 @@ class TriMesh:
     def filter_zero_area(self):
         """Remove all tris with zero area"""
         new_tris = TrianglesData()
-        for t in self.tris:
-            locs = tuple(self.verts[i] for i in t.indices)
+        for i, t in enumerate(self.tris):
+            tris = self.tris.indices[i]
+            locs = (self.verts[tris[0]], self.verts[tris[1]], self.verts[tris[2]])
             same_loc = locs[0] == locs[1] or locs[1] == locs[2] or locs[2] == locs[0]
             if not same_loc:
                 new_tris.append(t)
@@ -138,9 +154,12 @@ class TriMesh:
         # TODO: might cause color issue
         new_tris = TrianglesData()
         faces = set([])
-        for t in self.tris:
-            locs = tuple(self.verts[i] for i in t.indices)
+        for i, t in enumerate(self.tris):
+            tris = self.tris.indices[i]
+            locs = (self.verts[tris[0]], self.verts[tris[1]], self.verts[tris[2]])
             f_hash = tuple(sorted(locs))
+
+            # add only if hash not already there 
             if f_hash not in faces:
                 faces.add(f_hash)
                 new_tris.append(t)
@@ -167,14 +186,12 @@ class TriMesh:
 
         # Change tri indices to match new fused verts
         new_tris = []
-        for t in self.tris:
-            idcs = tuple(tri_map[i] for i in t.indices)
-            new_tris.append(t)
-            new_tris[-1].indices = idcs
+        for tis in self.tris.indices:
+            new_tris.append((tri_map[tis[0]], tri_map[tis[1]], tri_map[tis[2]]))
 
         # Save new data
         self.verts = new_verts
-        self.tris = new_tris
+        self.tris.indices = new_tris
 
     def add_mesh(self, other):
         # assert other is TriMesh
@@ -185,17 +202,17 @@ class TriMesh:
     def colorize(self, col):
         "Fill with color, color can be None"
         # assert len(self.tris) > 0
-        self.tris.color = [col] * len(self.tris.indices)
+        self.tris.color = [col] * len(self.tris)
 
     def set_batch(self, batch):
         "Set all triangle data to batch index"
         # assert len(self.tris) > 0
-        self.tris.color = [batch] * len(self.tris.indices)
+        self.tris.color = [batch] * len(self.tris)
 
     def set_material_name(self, name):
         "Set material name for all tris"
         # assert len(self.tris) > 0
-        self.tris.material_name = [name] * len(self.tris.indices)
+        self.tris.material_name = [name] * len(self.tris)
 
     def fill_empty_color(self):
         "Fill color==None with undef_color (currently pink)"
@@ -211,16 +228,16 @@ class TriMesh:
 
     def get_loop_colors(self):
         "Return colors in triangle loop creation order"
-        return [self.tris.colors[i//3] for i in range(len(self.tris))*3]
+        return [self.tris.colors[i // 3] for i in range(len(self.tris)) * 3]
 
     def get_loop_material_names(self):
         "Return material names in triangle loop creation order"
-        return [self.tris.material_name[i//3] for i in range(len(self.tris))*3]
+        return [self.tris.material_name[i // 3] for i in range(len(self.tris)) * 3]
 
     def get_loop_normals(self):
         "Return normals in triangle loop creation order"
-        return [self.tris.norms[i//3] for i in range(len(self.tris))*3]
+        return [self.tris.norms[i // 3] for i in range(len(self.tris)) * 3]
 
     def get_loop_uvs(self):
         "Return UVs in triangle loop creation order"
-        return [self.tris.uvs[i//3] for i in range(len(self.tris))*3]
+        return [self.tris.uvs[i // 3] for i in range(len(self.tris)) * 3]

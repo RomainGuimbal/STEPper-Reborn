@@ -710,7 +710,7 @@ class ReadSTEP:
 
         return TriMesh(verts=verts, tris=tris_data)
 
-    def build_trimesh(self, shape, lin_def=0.8, ang_def=0.5, hacks=set([])):
+    def build_trimesh(self, shape, lin_def=0.8, ang_def=0.5, hacks=set([])) -> TriMesh:
         out_mesh = TriMesh()
         out_mesh.matrix = np.eye(4, dtype=np.float32)
 

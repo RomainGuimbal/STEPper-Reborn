@@ -25,17 +25,14 @@ import numpy as np
 
 # import trimesh works in dev, but not in deploy
 from . import trimesh
-from . import nurbs
 
 importlib.reload(trimesh)
 
-from OCP.BRep import BRep_Builder, BRep_Tool
+from OCP.BRep import BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Surface
-from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert
 from OCP.BRepLProp import BRepLProp_SLProps
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.BRepTools import BRepTools
-from OCP.GeomConvert import GeomConvert
 from OCP.gp import gp
 from OCP.IFSelect import IFSelect_RetDone
 from OCP.Quantity import Quantity_Color, Quantity_TOC_RGB
@@ -44,7 +41,7 @@ from OCP.STEPControl import STEPControl_Reader
 from OCP.TCollection import TCollection_ExtendedString
 from OCP.TColStd import TColStd_SequenceOfAsciiString
 from OCP.TDataStd import TDataStd_Name
-from OCP.TDF import TDF_Tool, TDF_Label, TDF_LabelSequence
+from OCP.TDF import TDF_Label, TDF_LabelSequence
 from OCP.TDocStd import TDocStd_Document
 from OCP.TopAbs import (
     TopAbs_COMPOUND,
@@ -59,13 +56,13 @@ from OCP.TopAbs import (
 )
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopLoc import TopLoc_Location
-from OCP.TopoDS import TopoDS_Compound, TopoDS_Shape, TopoDS
+from OCP.TopoDS import TopoDS_Shape, TopoDS
 from OCP.XCAFApp import XCAFApp_Application
 from OCP.XCAFDoc import (
     XCAFDoc_DocumentTool,
     XCAFDoc_ColorGen,
     XCAFDoc_ColorSurf,
-    XCAFDoc_ColorCurv,
+    # XCAFDoc_ColorCurv,
 )
 from OCP.XSControl import XSControl_WorkSession
 
@@ -96,49 +93,6 @@ def _test_shape(sh):
     tmr = trsf_matrix(sh)
     if np.any(tmr != np.eye(4, dtype=np.float32)[:3, :4]):
         print(tmr)
-
-
-def nurbs_parse(current_face):
-    """Get NURBS points for a TopAbs_FACE"""
-
-    _test_shape(current_face)
-    nurbs_converter = BRepBuilderAPI_NurbsConvert(current_face)
-    nurbs_converter.Perform(current_face)
-    result_shape = nurbs_converter.Shape()
-    _test_shape(result_shape)
-    brep_face = BRep_Tool.Surface(TopoDS.Face(result_shape))
-    occ_face = GeomConvert.SurfaceToBSplineSurface(brep_face)
-    # _test_shape(occ_face)
-
-    # extract the Control Points of each face
-    n_poles_u = occ_face.NbUPoles()
-    n_poles_v = occ_face.NbVPoles()
-
-    # cycle over the poles to get their coordinates
-    points = []
-    for pole_u_direction in range(n_poles_u):
-        points.append([])
-        for pole_v_direction in range(n_poles_v):
-            pos = (pole_u_direction + 1, pole_v_direction + 1)
-            coords = occ_face.Pole(*pos)
-            np_coords = np.array((coords.X(), coords.Y(), coords.Z()))
-            weight = occ_face.Weight(*pos)
-            pt = nurbs.NurbsPoint((*np_coords, weight))
-            points[-1].append(pt)
-
-    # Get surface data (closed, periodic, degree)
-    assert len(points) > 1
-    assert len(points[0]) > 1
-    nbd = nurbs.NurbsData(points)
-
-    nbd.u_closed = occ_face.IsUClosed()
-    nbd.v_closed = occ_face.IsVClosed()
-    nbd.u_periodic = occ_face.IsUPeriodic()
-    nbd.v_periodic = occ_face.IsVPeriodic()
-    nbd.u_degree = occ_face.UDegree()
-    nbd.v_degree = occ_face.VDegree()
-
-    return nbd
 
 
 def force_ascii(i_file):
@@ -310,7 +264,7 @@ class ReadSTEP:
 
         c_gen = self.color_tool.GetColor(shape, XCAFDoc_ColorGen, c)
         c_surf = self.color_tool.GetColor(shape, XCAFDoc_ColorSurf, c)
-        c_curv = False #self.color_tool.GetColor(shape, XCAFDoc_ColorCurv, c) # TODO uncomment once priority are working
+        c_curv = False  # self.color_tool.GetColor(shape, XCAFDoc_ColorCurv, c) # TODO uncomment once priority are working
 
         if c_gen or c_surf or c_curv:
             iscolorset = True
@@ -589,7 +543,9 @@ class ReadSTEP:
                 self.shape_label[shape] = lab
 
                 # TODO Color priority usage looks non-implemented
-                self.face_color_priority[shape] = _set_color_and_get_priority(lab, shape)
+                self.face_color_priority[shape] = _set_color_and_get_priority(
+                    lab, shape
+                )
 
                 l_subss = TDF_LabelSequence()
                 self.shape_tool.GetSubShapes_s(lab, l_subss)
@@ -859,19 +815,3 @@ class ReadSTEP:
         print("[l]", end="", flush=True)
 
         return out_mesh
-
-    def build_nurbs(self, shape):
-        iter_shapes = [shape]
-        nbs = []
-        for _, shp in enumerate(iter_shapes):
-            ex = TopExp_Explorer(shp, TopAbs_FACE)
-            if not ex.More():
-                self.import_problems["Empty shape"] += 1
-                return []
-
-            while ex.More():
-                pt = nurbs_parse(TopoDS.Face(ex.Current()))
-                nbs.append(pt)
-                ex.Next()
-
-        return nbs

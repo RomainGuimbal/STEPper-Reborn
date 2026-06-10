@@ -21,6 +21,7 @@ import bpy
 from bpy.props import StringProperty
 from bpy_extras.io_utils import ImportHelper
 from .object_generator import (
+    HierarchyType,
     load_step,
     build_mesh,
     GLOBAL_FILE_CACHE,
@@ -136,16 +137,22 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
         description="Up axis of the imported model",
     )
 
-    hierarchy_types: bpy.props.EnumProperty(
+    hierarchy_type: bpy.props.EnumProperty(
         items=[
-            ("FLAT", "Flat collection", "", 2),
-            ("TREE", "Tree collection", "", 4),
-            ("EMPTIES", "Parented empties", "", 6),
-            # ("FLAT_AND_TREE", "Flat and tree collection", "", 0),
+            (str(int(HierarchyType.COLLECTION_FLAT)), "Flat collection", "", 0),
+            (str(int(HierarchyType.COLLECTION_TREE)), "Tree collection", "", 1),
+            (str(int(HierarchyType.EMPTIES_TREE)), "Parented empties", "", 2),
+            # (str(int(HierarchyType.COLLECTION_FLAT_AND_TREE)), "Flat and tree collection", "", 3),
+            (
+                str(int(HierarchyType.COLLECTION_INSTANCES)),
+                "Collection instances",
+                "",
+                4,
+            ),
         ],
         name="Tree hierarchy",
-        default="EMPTIES",
-        description="Organization styles of objects",
+        default=str(int(HierarchyType.EMPTIES_TREE)),
+        description="Organization style of objects",
     )
 
     user_scale: bpy.props.FloatProperty(
@@ -213,7 +220,7 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
 
             # Hierarchy
             row = body.row()
-            row.prop(self, "hierarchy_types", text="Hierarchy")
+            row.prop(self, "hierarchy_type", text="Hierarchy")
 
             # Custom scale
             col = body.column(align=False, heading="Overwrite Scale")
@@ -273,7 +280,7 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
                     lin_deflection=l_def,
                     ang_deflection=a_def,
                     up_as=self.up_as,
-                    htypes=self.hierarchy_types,##### TO REPLACE HERE
+                    htypes=HierarchyType(int(self.hierarchy_type)),
                 )
 
         ######################################
@@ -597,7 +604,7 @@ class STEP_AddonPreferences(bpy.types.AddonPreferences):
         row.prop(bpy.context.scene.stepper, "preferred_up_axis", expand=True)
 
         # col = layout.col()
-        # col.prop(bpy.context.scene.stepper, "hierarchy_types")
+        # col.prop(bpy.context.scene.stepper, "hierarchy_type")
 
         # col.operator(PMM_OT_EnsurePIP.bl_idname, text="Ensure PIP")
         # col.operator(PMM_OT_UpgradePIP.bl_idname, text="Upgrade PIP")

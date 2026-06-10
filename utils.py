@@ -8,6 +8,11 @@ def scalemat(mat, sl):
     # print(scaling)
     return np.matmul(scaling, mat)
 
+def scale_translation(mat, sl):
+    mat[0][3] *= sl
+    mat[1][3] *= sl
+    mat[2][3] *= sl
+    return mat
 
 def obj_unlink_all(obj):
     """Unlink object from all collections"""

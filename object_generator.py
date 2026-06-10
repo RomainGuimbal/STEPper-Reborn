@@ -1,10 +1,13 @@
 import ntpath
 import time
+
+from narwhals import col
 import numpy as np
 import bmesh
 import bpy
 from enum import IntEnum
 from collections import defaultdict
+from mathutils import Matrix, Vector
 from .trimesh import TriMesh
 from .utils import (
     add_material,
@@ -15,7 +18,9 @@ from .utils import (
     faces_of_edges,
     vert_coordinates_of_edges,
     vert_of_edges,
+    scale_translation,
 )
+from .importer import ShapeTreeNode
 
 GLOBAL_FILE_CACHE = {}
 
@@ -377,7 +382,9 @@ def build_hierarchy_collection(tree, created_objs, filename):
     hierarchy_collections = {}
     hierarchy_collections[-1] = tree_collection
 
-    def node_parse(node, level, parent_collection):
+    def node_parse(
+        node: ShapeTreeNode, level: int, parent_collection: bpy.types.Collection
+    ):
         # if "name" in node and node["children"] is not None:
         if len(node.children) > 0:
             collection_node = bpy.data.collections.new(node.name)
@@ -399,6 +406,8 @@ def build_hierarchy_collection(tree, created_objs, filename):
                 hierarchy_collections[obj["STEP_parent"]].objects.link(obj)
                 global_t = tree.nodes[obj["STEP_tree_location"]].global_transform
                 set_obj_matrix_world(obj, global_t)
+
+    return hierarchy_collections
 
 
 def build_hierarchy_empties(tree, created_objs, created_uuid):
@@ -440,20 +449,58 @@ def build_hierarchy_flat(tree, created_objs, filename):
         group_collection.objects.link(obj)
 
 
-def build_hierarchy_instances(tree, created_objs, filename, instanced_objects):
-    # instance_collection = bpy.data.collections.new(filename + ".instances")
-    # bpy.context.scene.collection.children.link(instance_collection)
+def build_collection_instances(instanced_objects, hierarchy_collections, scale):
+    # Add container at root collection
+    root_col = hierarchy_collections[-1]
+    components_container = bpy.data.collections.new("Components")
 
-    # for source_obj, instances_info in instanced_objects.items():
-    #     source_obj.select_set(True)
-    #     bpy.context.view_layer.objects.active = source_obj
-    #     bpy.ops.object.make_single_user(object=True, obdata=True)
+    # Put component collection first
+    other_children_snapshot = list(root_col.children).copy()
+    for c in other_children_snapshot:
+        root_col.children.unlink(c)
 
-    #     for shape_name, local_t, global_t in instances_info:
-    #         obj = source_obj.copy()
-    #         set_obj_matrix_world(obj, global_t)
-    #         instance_collection.objects.link(obj)
-    pass
+    root_col.children.link(components_container)
+
+    for c in other_children_snapshot:
+        root_col.children.link(c)
+
+    # Exclude
+    layer_col = bpy.context.view_layer.layer_collection.children[
+        root_col.name
+    ].children[components_container.name]
+    layer_col.exclude = True
+
+    # for each instanced object
+    for source_obj, instances_info in instanced_objects.items():
+        # put original in a collection to be instanced and reset its transform
+        component_col = bpy.data.collections.new(source_obj.name)
+        components_container.children.link(component_col)
+        parent_collection = source_obj.users_collection[0]
+        trsf = source_obj.matrix_world.copy()
+        source_obj.matrix_world = Matrix()
+        source_obj.users_collection[0].objects.unlink(source_obj)
+        component_col.objects.link(source_obj)
+
+        # instance original
+        empty = bpy.data.objects.new(source_obj.name + "_instance", None)
+        empty.instance_type = "COLLECTION"
+        empty.instance_collection = component_col
+        empty.matrix_world = trsf
+        empty.location *= scale
+        empty.empty_display_size = scale
+        parent_collection.objects.link(empty)
+
+        # instance copies
+        for shape_name, local_t, global_t, parent_uuid in instances_info:
+            # create instance
+            empty = bpy.data.objects.new(shape_name + "_instance", None)
+            empty.instance_type = "COLLECTION"
+            empty.instance_collection = component_col
+            empty.empty_display_size = scale
+            scale_translation(global_t, scale)
+            set_obj_matrix_world(empty, global_t)
+            parent_col = hierarchy_collections[parent_uuid]
+            parent_col.objects.link(empty)
 
 
 def load_step(
@@ -466,10 +513,10 @@ def load_step(
     up_as="Y",
     htypes=HierarchyType.COLLECTION_TREE,
 ):
+    # Find file
     from . import importer
 
     filename = "".join(ntpath.basename(filepath).split(".")[:-1])
-
     if filepath not in GLOBAL_FILE_CACHE:
         try:
             step_reader = importer.ReadSTEP(filepath)
@@ -477,33 +524,34 @@ def load_step(
         except AssertionError as e:
             print(e)
             return False
-
     else:
         step_reader = GLOBAL_FILE_CACHE[filepath]
         print("Loaded file from cache")
 
+    # Init Reader
     tree = step_reader.tree
+
+    # Scale
     scale = step_reader.scale
     if custom_scale is not None:
         scale = custom_scale
-
-    # divide by Blender unit length
+    # Divide by Blender unit length
     scale /= context.scene.unit_settings.scale_length
     print("Current Blender scale set at:", context.scene.unit_settings.scale_length)
 
+    # Init data
     wm = bpy.context.window_manager
-
     created_objs = []
     created_names = {}
     created_uuid = {}
     instanced_objects = {}  # {Original ref : [instances info]}
 
-    # traverse shapes, render in "face" mode
+    # Traverse shapes, render in "face" mode
     start_time = time.time()
     all_shapes = tree.get_shapes()
     total = len(all_shapes)
 
-    # Build mesh objects
+    # Build shapes
     wm.progress_begin(0, total)
     for i, (shp, node_index) in enumerate(all_shapes):
         parent_uuid, self_uuid, tag, obj_name, _, local_t, global_t = tree.nodes[
@@ -532,9 +580,14 @@ def load_step(
 
                 source_obj = created_names[shape_name]
                 if htypes == HierarchyType.COLLECTION_INSTANCES:
-                    instanced_objects[source_obj].append(
-                        (shape_name, local_t, global_t)
-                    )
+                    if source_obj in instanced_objects:
+                        instanced_objects[source_obj].append(
+                            (shape_name, local_t, global_t, parent_uuid)
+                        )
+                    else:
+                        instanced_objects[source_obj] = [
+                            (shape_name, local_t, global_t, parent_uuid)
+                        ]
                 else:
                     obj = source_obj.copy()
                     created_objs.append(obj)
@@ -594,7 +647,10 @@ def load_step(
         case HierarchyType.EMPTIES_TREE:
             build_hierarchy_empties(tree, created_objs, created_uuid)
         case HierarchyType.COLLECTION_INSTANCES:
-            build_hierarchy_instances(tree, created_objs, filename, instanced_objects)
+            hierarchy_collections = build_hierarchy_collection(
+                tree, created_objs, filename
+            )
+            build_collection_instances(instanced_objects, hierarchy_collections, scale)
 
     transform_to_up(up_as[0], created_objs, scale)
 

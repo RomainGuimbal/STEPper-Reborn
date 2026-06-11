@@ -145,8 +145,7 @@ def find_seams(trimesh, face_pair_of_edges):
     """
     Mark boundaries between different shape batches
     """
-    # TODO: make batches a mono-block array of TriMesh
-    batches = [t.batch for t in trimesh.tris]
+    batches = trimesh.tris.batch
     is_seam = np.bool([batches[f1] != batches[f2] for f1, f2 in face_pair_of_edges])
     return is_seam
 
@@ -158,11 +157,11 @@ def find_sharp(ob_data, trimesh, face_pair_of_edges, margin):
     # for each tris, stores all normals of the 3 vertices
     face_vert_norms = [
         {
-            face.indices[0]: face.norms[0],
-            face.indices[1]: face.norms[1],
-            face.indices[2]: face.norms[2],
+            trimesh.tris.indices[i][0]: trimesh.tris.norms[i][0],
+            trimesh.tris.indices[i][1]: trimesh.tris.norms[i][1],
+            trimesh.tris.indices[i][2]: trimesh.tris.norms[i][2],
         }
-        for face in trimesh.tris
+        for i in range(len(trimesh.tris))
     ]
 
     # get the 3 verts normals for the 2 faces of each edges

@@ -27,7 +27,7 @@ STEP file. The structure is presented as an indented text outline."""
 
 from OCP.IFSelect import IFSelect_RetDone
 from OCP.STEPCAFControl import STEPCAFControl_Reader
-from OCP.TCollection import TCollection_ExtendedString
+# from OCP.TCollection import TCollection_ExtendedString
 from OCP.TDF import TDF_Label, TDF_LabelSequence
 from OCP.TDocStd import TDocStd_Document
 from OCP.XCAFApp import XCAFApp_Application_GetApplication

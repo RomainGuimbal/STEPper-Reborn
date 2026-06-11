@@ -17,13 +17,11 @@
 
 
 import os
+import numpy as np
+
 from collections import OrderedDict
 from dataclasses import dataclass, field
 
-import numpy as np
-
-# import trimesh works in dev, but not in deploy
-from .trimesh import TrianglesData, TriMesh
 from OCP.BRep import BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.BRepLProp import BRepLProp_SLProps
@@ -61,6 +59,8 @@ from OCP.XCAFDoc import (
     # XCAFDoc_ColorCurv,
 )
 from OCP.XSControl import XSControl_WorkSession
+
+from .trimesh import TrianglesData, TriMesh
 
 
 def b_colorname(col):
@@ -699,7 +699,7 @@ class ReadSTEP:
 
         tris_data = TrianglesData(
             indices=tris,
-            #TODO : probably optimizable
+            # TODO : probably optimizable
             norms=[(norms[t[0]], norms[t[1]], norms[t[2]]) for t in tris],
             uvs=[(uvs[t[0]], uvs[t[1]], uvs[t[2]]) for t in tris],
             colors=[None] * len(tris),  # None means no color

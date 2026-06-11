@@ -19,6 +19,23 @@
       "command": "vizviewer",
       "args": ["C:/tmp/blender_trace.json"],
       "problemMatcher": []
+    },
+    {
+      "label": "Build",
+      "type": "shell",
+      "command": "blender",
+      "args": [
+        "--command",
+        "extension",
+        "build",
+        "--source-dir",
+        "${workspaceFolder}",
+        "--output-dir",
+        "${workspaceFolder}/..",
+        "--split-platforms",
+        "--verbose"
+      ],
+      "problemMatcher": []
     }
   ]
 }

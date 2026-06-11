@@ -1,7 +1,5 @@
 import ntpath
 import time
-
-from narwhals import col
 import numpy as np
 import bmesh
 import bpy

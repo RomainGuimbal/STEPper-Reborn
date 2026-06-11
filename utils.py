@@ -8,11 +8,13 @@ def scalemat(mat, sl):
     # print(scaling)
     return np.matmul(scaling, mat)
 
+
 def scale_translation(mat, sl):
     mat[0][3] *= sl
     mat[1][3] *= sl
     mat[2][3] *= sl
     return mat
+
 
 def obj_unlink_all(obj):
     """Unlink object from all collections"""
@@ -155,8 +157,9 @@ def vert_of_edges(mesh: bpy.types.Mesh):
     edge_verts = np.empty(len(mesh.edges) * 2, dtype=np.int32)
     mesh.edges.foreach_get("vertices", edge_verts)
     edge_verts = edge_verts.reshape(-1, 2)  # transpose
-    
+
     return edge_verts
+
 
 def vert_coordinates_of_edges(mesh: bpy.types.Mesh, edge_verts):
     # Vert positions
@@ -170,8 +173,9 @@ def vert_coordinates_of_edges(mesh: bpy.types.Mesh, edge_verts):
     for i in range(len(mesh.edges)):
         vert_co_0[i] = coords[edge_verts[i, 0]]
         vert_co_1[i] = coords[edge_verts[i, 1]]
-    
+
     return vert_co_0, vert_co_1
+
 
 def faces_of_edges(mesh: bpy.types.Mesh):
     # Loop data

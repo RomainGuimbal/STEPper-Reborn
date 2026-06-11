@@ -256,35 +256,34 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
         if self.override_file != "":
             import_files = [self.override_file]
 
-        ######################################
-        ######################################
+        # --- VizTracer Block ---
 
-        from viztracer import VizTracer
+        # from viztracer import VizTracer
 
-        with VizTracer(
-            output_file="/tmp/blender_trace.json",
-            tracer_entries=3000000,
-            min_duration=5,
-        ) as tracer:
-            folder = os.path.dirname(self.filepath)
+        # with VizTracer(
+        #     output_file="/tmp/blender_trace.json",
+        #     tracer_entries=3000000,
+        #     min_duration=5,
+        # ) as tracer:
 
-            # iterate through the selected files
-            for _, i in enumerate(import_files):
-                # generate full path to file
-                path_to_file = os.path.join(folder, i)
-                print("Opening file:", path_to_file)
-                result = load_step(
-                    context,
-                    path_to_file,
-                    custom_scale=self.user_scale if self.custom_scale else None,
-                    lin_deflection=l_def,
-                    ang_deflection=a_def,
-                    up_as=self.up_as,
-                    htypes=HierarchyType(int(self.hierarchy_type)),
-                )
+        folder = os.path.dirname(self.filepath)
 
-        ######################################
-        ######################################
+        # iterate through the selected files
+        for _, i in enumerate(import_files):
+            # generate full path to file
+            path_to_file = os.path.join(folder, i)
+            print("Opening file:", path_to_file)
+            result = load_step(
+                context,
+                path_to_file,
+                custom_scale=self.user_scale if self.custom_scale else None,
+                lin_deflection=l_def,
+                ang_deflection=a_def,
+                up_as=self.up_as,
+                htypes=HierarchyType(int(self.hierarchy_type)),
+            )
+
+        # --- End of VizTracer block ---
 
         if result:
             return {"FINISHED"}

@@ -231,7 +231,8 @@ class TriMesh:
 
     def get_loop_normals(self):
         "Return normals in triangle loop creation order"
-        return self.tris.norms  # Already 3 per triangle, right ?
+        norms = np.array(self.tris.norms)
+        return norms.reshape((norms.shape[0]*3, 3))  # Already 3 per triangle, right ?
 
     def get_loop_uvs(self):
         "Return UVs in triangle loop creation order"

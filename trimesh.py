@@ -1,54 +1,100 @@
 import numpy as np
 import bpy
+from dataclasses import dataclass
 
 
 def make_tri_hash(f):
     return frozenset([tuple(f[0]), tuple(f[1]), tuple(f[2])])
 
 
-class TriData:
-    """Associated data for a single triangle"""
+@dataclass
+class TrianglesData:
+    """
+    Must stay aligned
+    """
 
-    def __init__(self, indices, norms, uvs, color, material, mat_name, batch):
-        assert len(norms) == 3, f"Norms len ({len(norms)}:{type(norms)}) should be 3"
-        assert len(indices) == 3, f"Value: {indices}"
-        assert len(uvs) == 3
-        assert not isinstance(color, list)
-        assert not isinstance(material, list)
-        assert indices[0] != indices[1]
-        assert indices[1] != indices[2]
-        assert indices[2] != indices[0]
-        assert mat_name == None or (isinstance(mat_name, str) and len(mat_name) > 0)
+    def __init__(
+        self,
+        indices=None,
+        norms=None,
+        colors=None,
+        material=None,
+        material_name=None,
+        uvs=None,
+        batch=None,
+    ):
+        self.indices = [] if indices is None else indices
+        self.norms = [] if norms is None else norms
+        self.colors = [] if colors is None else colors
+        self.material = [] if material is None else material
+        self.material_name = [] if material_name is None else material_name
+        self.uvs = [] if uvs is None else uvs
+        self.batch = [] if batch is None else batch
 
-        self.indices = indices
-        self.norms = norms
-        # If color == None: means has no color defined
-        self.color = color
-        self.material = material
-        self.material_name = mat_name
-        self.batch = batch
-        self.uvs = uvs
+    def __getitem__(self, index):
+        # Could also be a dictionary
+        return (
+            self.indices[index],
+            self.norms[index],
+            self.colors[index],
+            self.material[index],
+            self.material_name[index],
+            self.uvs[index],
+            self.batch[index],
+        )
 
+    def __len__(self):
+        return len(self.indices)
 
-# TODO: TriData hash function for sets
+    def __setitem__(self, index, value):
+        (
+            self.indices[index],
+            self.norms[index],
+            self.colors[index],
+            self.material[index],
+            self.material_name[index],
+            self.uvs[index],
+            self.batch[index],
+        ) = value
+
+    def append(self, value):
+        self.indices.append(value[0]),
+        self.norms.append(value[1]),
+        self.colors.append(value[2]),
+        self.material.append(value[3]),
+        self.material_name.append(value[4]),
+        self.uvs.append(value[5]),
+        self.batch.append(value[6]),
+
+    def extend(self, other, offset):
+        self.indices.extend(
+            [
+                (tis[0] + offset, tis[1] + offset, tis[2] + offset)
+                for tis in other.indices
+            ]
+        )
+        self.norms.extend(other.norms)
+        self.uvs.extend(other.uvs)
+        self.colors.extend(other.colors)
+        self.material.extend(other.material)
+        self.material_name.extend(other.material_name)
+        self.batch.extend(other.batch)
 
 
 class TriMesh:
     """Triangle mesh. Array of triangles of which each item has three pointers
-    to locations inside array of verts. Each triangle data is defined through TriData class
+    to locations inside array of verts.
     """
 
     def __init__(self, verts=None, tris=None, matrix=None):
 
         if verts is None and tris is None:
-            self.tris = []
+            self.tris = TrianglesData()
             self.verts = []
-            self.tri_hash = {}
             self.matrix = np.empty((3, 4), dtype=np.float32)
 
         else:
             assert verts is not None
-            # assert tris is not None
 
             if matrix is None:
                 matrix = np.empty((3, 4), dtype=np.float32)
@@ -57,19 +103,10 @@ class TriMesh:
 
             self.matrix = matrix
             self.verts = verts
-            self.tri_hash = {}
 
-            # Only process tris if they exist
-            # Might be vert-only input
             if tris is not None:
                 self.tris = tris
-                # for i, t in enumerate(tris):
-                #     self.tris[i].batch = self.batch_index
-
-                # Create tri hashes for overwrite detection
-                for ti, t in enumerate(self.tris):
-                    h = make_tri_hash([tuple(self.verts[i]) for i in t.indices])
-                    self.tri_hash[h] = ti
+                # self.tris.batch = self.batch_index
             else:
                 self.tris = None
 
@@ -77,9 +114,9 @@ class TriMesh:
         """Check all tris for overlap. Return None if none found"""
         faces = set([])
         # TODO: all matches, not just the first one
-        for ti, t in enumerate(self.tris):
+        for i, tis in enumerate(self.tris.indices):
             # Filter zero area and existing faces
-            locs = [self.verts[i] for i in t.indices]
+            locs = [self.verts[i] for i in tis]
             same_loc = locs[0] == locs[1] or locs[1] == locs[2] or locs[2] == locs[0]
             same_face = False
             f_hash = tuple(sorted(locs))
@@ -90,17 +127,18 @@ class TriMesh:
             if same_loc or same_face:
                 res = {}
                 if same_loc:
-                    res["same_loc"] = (ti, t.indices, locs)
+                    res["same_loc"] = (i, tis, locs)
                 if same_face:
-                    res["same_face"] = (ti, t.indices, f_hash)
+                    res["same_face"] = (i, tis, f_hash)
                 return res
         return None
 
     def filter_zero_area(self):
         """Remove all tris with zero area"""
-        new_tris = []
-        for t in self.tris:
-            locs = tuple(self.verts[i] for i in t.indices)
+        new_tris = TrianglesData()
+        for i, t in enumerate(self.tris):
+            tis = self.tris.indices[i]
+            locs = (self.verts[tis[0]], self.verts[tis[1]], self.verts[tis[2]])
             same_loc = locs[0] == locs[1] or locs[1] == locs[2] or locs[2] == locs[0]
             if not same_loc:
                 new_tris.append(t)
@@ -109,11 +147,14 @@ class TriMesh:
     def filter_same_face(self):
         """Remove all duplicate tris"""
         # TODO: might cause color issue
-        new_tris = []
+        new_tris = TrianglesData()
         faces = set([])
-        for t in self.tris:
-            locs = tuple(self.verts[i] for i in t.indices)
+        for i, t in enumerate(self.tris):
+            tis = self.tris.indices[i]
+            locs = (self.verts[tis[0]], self.verts[tis[1]], self.verts[tis[2]])
             f_hash = tuple(sorted(locs))
+
+            # add only if hash not already there
             if f_hash not in faces:
                 faces.add(f_hash)
                 new_tris.append(t)
@@ -140,159 +181,59 @@ class TriMesh:
 
         # Change tri indices to match new fused verts
         new_tris = []
-        for ti, t in enumerate(self.tris):
-            idcs = tuple(tri_map[i] for i in t.indices)
-            new_tris.append(self.tris[ti])
-            new_tris[-1].indices = idcs
+        for tis in self.tris.indices:
+            new_tris.append((tri_map[tis[0]], tri_map[tis[1]], tri_map[tis[2]]))
 
         # Save new data
         self.verts = new_verts
-        self.tris = new_tris
+        self.tris.indices = new_tris
 
     def add_mesh(self, other):
         # assert other is TriMesh
         offset = len(self.verts)
         self.verts.extend(other.verts)
-        for t in other.tris:
-            shifted = (
-                t.indices[0] + offset,
-                t.indices[1] + offset,
-                t.indices[2] + offset,
-            )
-            self.tris.append(
-                TriData(
-                    shifted,
-                    t.norms,
-                    t.uvs,
-                    t.color,
-                    t.material,
-                    t.material_name,
-                    t.batch,
-                )
-            )
-
-    def add_mesh_overwrite_identical(self, other):
-        # assert other is TriMesh
-        for i in range(len(other.tris)):
-            otr = other.tris[i]
-            self.add_tri_overwrite([other.verts[t] for t in otr.indices], otr)
-
-    def add_tri(self, verts, norms, colors, material, mat_name, uvs, batch_id):
-        # TODO: write tests for this
-        assert len(verts) == 3
-        vc_s = len(self.verts)
-        self.verts += verts
-        tri = (vc_s, vc_s + 1, vc_s + 2)
-        self.tris.append(TriData(tri, norms, uvs, colors, material, mat_name, batch_id))
-        self.tri_hash[make_tri_hash([tuple(verts[i]) for i in range(3)])] = (
-            len(self.tris) - 1
-        )
-        assert self.verts[self.tris[-1].indices[0]] == verts[0]
-        assert self.verts[self.tris[-1].indices[2]] == verts[2]
-
-    def add_tri_overwrite(self, verts, otr, batch_priority=True):
-        assert len(verts) == 3
-        fhash = make_tri_hash([tuple(verts[i]) for i in range(3)])
-        vc_s = len(self.verts)
-
-        if fhash not in self.tri_hash:
-            self.verts += verts
-            tri = (vc_s, vc_s + 1, vc_s + 2)
-            self.tris.append(
-                TriData(
-                    tri,
-                    otr.norms,
-                    otr.uvs,
-                    otr.color,
-                    otr.material,
-                    otr.material_name,
-                    otr.batch,
-                )
-            )
-            self.tri_hash[fhash] = len(self.tris) - 1
-            assert self.verts[self.tris[-1].indices[0]] == verts[0]
-            assert self.verts[self.tris[-1].indices[2]] == verts[2]
-        else:
-            tri = self.tri_hash[fhash]
-            overwrite = True
-
-            # Use batch index to determine if overwrite is allowed
-            # later batches overwrite earlier ones
-            if batch_priority and (otr.color is not None):
-                overwrite = False
-                if (self.tris[tri].color is not None) and (
-                    self.tris[tri].batch < otr.batch
-                ):
-                    overwrite = True
-                else:
-                    overwrite = True
-
-            if overwrite:
-                self.tris[tri].color = otr.color
-                self.tris[tri].material = otr.material
-                self.tris[tri].material_name = otr.material_name
-                self.tris[tri].uvs = otr.uvs
-                self.tris[tri].batch = otr.batch
+        self.tris.extend(other.tris, offset)
 
     def colorize(self, col):
         "Fill with color, color can be None"
         # assert len(self.tris) > 0
-        for t in range(len(self.tris)):
-            self.tris[t].color = col
+        self.tris.colors = [col] * len(self.tris)
 
     def set_batch(self, batch):
         "Set all triangle data to batch index"
-        for i, t in enumerate(self.tris):
-            self.tris[i].batch = batch
+        # assert len(self.tris) > 0
+        self.tris.batch = [batch] * len(self.tris)
 
     def set_material_name(self, name):
         "Set material name for all tris"
         # assert len(self.tris) > 0
-        for t in range(len(self.tris)):
-            self.tris[t].material_name = name
+        self.tris.material_name = [name] * len(self.tris)
 
     def fill_empty_color(self):
         "Fill color==None with undef_color (currently pink)"
-        # pink
-        undef_color = (1.0, 0.0, 1.0)
+        # TODO : make undef black and add attributes to tell if face is colored so the shader can know
+        undef_color = (1.0, 0.0, 1.0)  # pink
         if len(self.tris) == 0:
             # Empty mesh
             return
-        for t in range(len(self.tris)):
-            if self.tris[t].color == None:
-                self.tris[t].color = undef_color
+        self.tris.colors = [c if c else undef_color for c in self.tris.colors]
 
     def add_to_mesh(self, mesh: bpy.types.Mesh):
-        mesh.from_pydata(self.verts, [], [t.indices for t in self.tris])
+        mesh.from_pydata(self.verts, [], self.tris.indices)
 
     def get_loop_colors(self):
         "Return colors in triangle loop creation order"
-        cols = []
-        for t in self.tris:
-            for _ in range(3):
-                cols.append(t.color)
-        return cols
+        return [self.tris.colors[i // 3] for i in range(len(self.tris) * 3)]
 
     def get_loop_material_names(self):
         "Return material names in triangle loop creation order"
-        cols = []
-        for t in self.tris:
-            for _ in range(3):
-                cols.append(t.material_name)
-        return cols
+        return [self.tris.material_name[i // 3] for i in range(len(self.tris) * 3)]
 
     def get_loop_normals(self):
         "Return normals in triangle loop creation order"
-        norms = []
-        for t in self.tris:
-            for i in range(3):
-                norms.append(t.norms[i])
-        return norms
+        norms = np.array(self.tris.norms)
+        return norms.reshape((norms.shape[0]*3, 3))  # Already 3 per triangle, right ?
 
     def get_loop_uvs(self):
         "Return UVs in triangle loop creation order"
-        uvs = []
-        for t in self.tris:
-            for i in range(3):
-                uvs.append(t.uvs[i])
-        return uvs
+        return [self.tris.uvs[i // 3] for i in range(len(self.tris) * 3)]

@@ -16,18 +16,14 @@
 # Modified 2025 Romain Guimbal
 
 
-import importlib
 import os
-from collections import defaultdict, OrderedDict
+from collections import OrderedDict
 from dataclasses import dataclass, field
 
 import numpy as np
 
 # import trimesh works in dev, but not in deploy
-from . import trimesh
-
-importlib.reload(trimesh)
-
+from .trimesh import TrianglesData, TriMesh
 from OCP.BRep import BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.BRepLProp import BRepLProp_SLProps
@@ -701,24 +697,21 @@ class ReadSTEP:
         if undef_normals:
             self.import_problems["Undefined normals"] += 1
 
-        tri_data = []
-        for ti, t in enumerate(tris):
-            tri_data.append(
-                trimesh.TriData(
-                    t,
-                    [norms[i] for i in t],
-                    [uvs[i] for i in t],
-                    None,
-                    None,
-                    None,
-                    None,
-                )
-            )
+        tris_data = TrianglesData(
+            indices=tris,
+            #TODO : probably optimizable
+            norms=[(norms[t[0]], norms[t[1]], norms[t[2]]) for t in tris],
+            uvs=[(uvs[t[0]], uvs[t[1]], uvs[t[2]]) for t in tris],
+            colors=[None] * len(tris),  # None means no color
+            material=[None] * len(tris),
+            material_name=[None] * len(tris),
+            batch=[None] * len(tris),
+        )
 
-        return trimesh.TriMesh(verts=verts, tris=tri_data)
+        return TriMesh(verts=verts, tris=tris_data)
 
-    def build_trimesh(self, shape, lin_def=0.8, ang_def=0.5, hacks=set([])):
-        out_mesh = trimesh.TriMesh()
+    def build_trimesh(self, shape, lin_def=0.8, ang_def=0.5, hacks=set([])) -> TriMesh:
+        out_mesh = TriMesh()
         out_mesh.matrix = np.eye(4, dtype=np.float32)
 
         # TODO: this is hack

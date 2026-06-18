@@ -20,6 +20,7 @@ from .utils import (
 from .importer import ShapeTreeNode
 
 GLOBAL_FILE_CACHE = {}
+ROOT_PARENT = -1
 
 
 class HierarchyType(IntEnum):
@@ -262,6 +263,10 @@ def build_mesh(
     trimesh.filter_zero_area()
     trimesh.filter_same_face()
     trimesh.fill_empty_color()
+
+    # Temporary fix. Original addon was apparently smarter at replacing only the rebuilt faces
+    obj.data.clear_geometry()
+
     trimesh.add_to_mesh(obj.data)
     obj.data.update()
 
@@ -310,7 +315,9 @@ def build_hierarchy_collection(tree, created_objs, filename):
         # link objects to tree
         if len(hierarchy_collections.items()) > 0:
             for obj in created_objs:
-                hierarchy_collections[obj["STEP_parent"]].objects.link(obj)
+                parent_col_uuid = obj.get("STEP_parent", ROOT_PARENT)
+                parent_col = hierarchy_collections.get(parent_col_uuid, hierarchy_collections[-1])
+                parent_col.objects.link(obj)
                 global_t = tree.nodes[obj["STEP_tree_location"]].global_transform
                 set_obj_matrix_world(obj, global_t)
 
@@ -389,7 +396,7 @@ def build_collection_instances(instanced_objects, hierarchy_collections, scale):
         component_col.objects.link(source_obj)
 
         # instance original
-        empty = bpy.data.objects.new(source_obj.name + "_instance", None)
+        empty = bpy.data.objects.new(source_obj.name, None)
         empty.instance_type = "COLLECTION"
         empty.instance_collection = component_col
         empty.matrix_world = trsf
@@ -400,13 +407,13 @@ def build_collection_instances(instanced_objects, hierarchy_collections, scale):
         # instance copies
         for shape_name, local_t, global_t, parent_uuid in instances_info:
             # create instance
-            empty = bpy.data.objects.new(shape_name + "_instance", None)
+            empty = bpy.data.objects.new(source_obj.name + "_instance", None)
             empty.instance_type = "COLLECTION"
             empty.instance_collection = component_col
             empty.empty_display_size = scale
             scale_translation(global_t, scale)
             set_obj_matrix_world(empty, global_t)
-            parent_col = hierarchy_collections[parent_uuid]
+            parent_col = hierarchy_collections.get(parent_uuid, hierarchy_collections[-1])
             parent_col.objects.link(empty)
 
 
@@ -422,8 +429,9 @@ def load_step(
 ):
     # Find file
     from . import importer
-
     filename = "".join(ntpath.basename(filepath).split(".")[:-1])
+    
+    # Try retrieve step_reader from cache
     if filepath not in GLOBAL_FILE_CACHE:
         try:
             step_reader = importer.ReadSTEP(filepath)
@@ -458,7 +466,7 @@ def load_step(
     all_shapes = tree.get_shapes()
     total = len(all_shapes)
 
-    # Build shapes
+    # Build shapes objects
     wm.progress_begin(0, total)
     for i, (shp, node_index) in enumerate(all_shapes):
         parent_uuid, self_uuid, tag, obj_name, _, local_t, global_t = tree.nodes[
@@ -488,12 +496,14 @@ def load_step(
                 source_obj = created_names[shape_name]
                 if htypes == HierarchyType.COLLECTION_INSTANCES:
                     if source_obj in instanced_objects:
+                        parent_for_instance = parent_uuid if parent_uuid != 0 else ROOT_PARENT
                         instanced_objects[source_obj].append(
-                            (shape_name, local_t, global_t, parent_uuid)
+                            (shape_name, local_t, global_t, parent_for_instance)
                         )
                     else:
+                        parent_for_instance = parent_uuid if parent_uuid != 0 else ROOT_PARENT
                         instanced_objects[source_obj] = [
-                            (shape_name, local_t, global_t, parent_uuid)
+                            (shape_name, local_t, global_t, parent_for_instance)
                         ]
                 else:
                     obj = source_obj.copy()
@@ -526,7 +536,8 @@ def load_step(
         if obj:
             # assign property to obj
             obj["STEP_tag"] = tag
-            obj["STEP_parent"] = parent_uuid
+            obj_parent = parent_uuid if parent_uuid != 0 else ROOT_PARENT
+            obj["STEP_parent"] = obj_parent
             obj["STEP_uuid"] = self_uuid
             obj["STEP_file"] = filepath
             obj["STEP_name"] = obj_name

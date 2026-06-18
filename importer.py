@@ -56,7 +56,7 @@ from OCP.XCAFDoc import (
     XCAFDoc_DocumentTool,
     XCAFDoc_ColorGen,
     XCAFDoc_ColorSurf,
-    # XCAFDoc_ColorCurv,
+    XCAFDoc_ColorCurv,
 )
 from OCP.XSControl import XSControl_WorkSession
 
@@ -251,23 +251,24 @@ class ReadSTEP:
             lab: shape label
         """
         # default color = pink
-        c = Quantity_Color(1.0, 0.0, 1.0, Quantity_TOC_RGB)
+        color = Quantity_Color(1.0, 0.0, 1.0, Quantity_TOC_RGB)
         iscolorset = False
         colortype = None
 
         shape = self.shape_tool.GetShape_s(lab)
-        print(shape.ShapeType())
+        # print(shape.ShapeType())
 
-        c_gen = self.color_tool.GetColor(shape, XCAFDoc_ColorGen, c)
-        c_surf = self.color_tool.GetColor(shape, XCAFDoc_ColorSurf, c)
-        c_curv = False  # self.color_tool.GetColor(shape, XCAFDoc_ColorCurv, c) # TODO uncomment once priority are working
+        # Overwrites each type
+        c_gen_exists = self.color_tool.GetColor(shape, XCAFDoc_ColorGen, color)
+        c_surf_exists = self.color_tool.GetColor(shape, XCAFDoc_ColorSurf, color)
+        c_curv_exists = False  # self.color_tool.GetColor(shape, XCAFDoc_ColorCurv, color) Supposed to be a fallback but overwrite't
 
-        if c_gen or c_surf or c_curv:
+        if c_gen_exists or c_surf_exists or c_curv_exists:
             iscolorset = True
             # Color priority (1/type) is the same as CAD assistant material tree display
-            colortype = c_gen * 1 + c_surf * 2 + c_curv * 3
+            colortype = c_gen_exists * 1 + c_surf_exists * 2 + c_curv_exists * 3
 
-        return c, colortype, iscolorset
+        return color, colortype, iscolorset
 
     def print_all_colors(self):
         tcol = Quantity_Color(1.0, 0.0, 1.0, Quantity_TOC_RGB)
@@ -424,27 +425,27 @@ class ReadSTEP:
 
         self.doc = doc
 
-    def transfer_simple(self, fname):
-        # see stepanalyzer.py for license details
-        print("Init simple transfer")
+    # def transfer_simple(self, fname):
+    #     # see stepanalyzer.py for license details
+    #     print("Init simple transfer")
 
-        # Create the application, empty document and shape_tool
-        doc = TDocStd_Document(TCollection_ExtendedString("STEP"))
-        app = XCAFApp_Application.GetApplication()
-        app.NewDocument("MDTV-XCAF", doc)
+    #     # Create the application, empty document and shape_tool
+    #     doc = TDocStd_Document(TCollection_ExtendedString("STEP"))
+    #     app = XCAFApp_Application.GetApplication()
+    #     app.NewDocument("MDTV-XCAF", doc)
 
-        # Read file and return populated doc
-        step_reader = STEPCAFControl_Reader()
-        step_reader.SetColorMode(True)
-        step_reader.SetLayerMode(True)
-        step_reader.SetNameMode(True)
-        step_reader.SetMatMode(True)
-        status = step_reader.ReadFile(fname)
-        if status == IFSelect_RetDone:
-            step_reader.Transfer(doc)
-        self.scale = 0.001
+    #     # Read file and return populated doc
+    #     step_reader = STEPCAFControl_Reader()
+    #     step_reader.SetColorMode(True)
+    #     step_reader.SetLayerMode(True)
+    #     step_reader.SetNameMode(True)
+    #     step_reader.SetMatMode(True)
+    #     status = step_reader.ReadFile(fname)
+    #     if status == IFSelect_RetDone:
+    #         step_reader.Transfer(doc)
+    #     self.scale = 0.001
 
-        self.doc = doc
+    #     self.doc = doc
 
     def init_reader(self, filename):
         if not os.path.isfile(filename):

@@ -151,7 +151,7 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
             ),
         ],
         name="Tree hierarchy",
-        default=str(int(HierarchyType.EMPTIES_TREE)),
+        default=str(int(HierarchyType.COLLECTION_TREE)),
         description="Organization style of objects",
     )
 
@@ -300,7 +300,6 @@ class STEP_OT_ClearCache(bpy.types.Operator):
     bl_description = "Clear STEP cache, enabling the reload of a file"
 
     def execute(self, context):
-        # utils.memorytrace_print()
         # global GLOBAL_FILE_CACHE
         # items = list(GLOBAL_FILE_CACHE.values())
         # for entry in items:
@@ -437,7 +436,6 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
                     other_obj.select_set(True)
 
         # Reload files if not in cache
-        reload_needed = False
         for o in selected_objects:
             if o["STEP_file"] not in GLOBAL_FILE_CACHE:
                 bpy.ops.object.occ_reload_step()

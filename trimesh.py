@@ -1,6 +1,7 @@
 import numpy as np
 import bpy
 from dataclasses import dataclass
+from mathutils import Vector
 
 
 def make_tri_hash(f):
@@ -210,16 +211,16 @@ class TriMesh:
         self.tris.material_name = [name] * len(self.tris)
 
     def fill_empty_color(self):
-        "Fill color==None with undef_color (currently pink)"
-        # TODO : make undef black and add attributes to tell if face is colored so the shader can know
-        undef_color = (1.0, 0.0, 1.0)  # pink
+        """
+        Fill tris empty colors
+        """
         if len(self.tris) == 0:
-            # Empty mesh
             return
+        undef_color = (0.8, 0.8, 0.8)
         self.tris.colors = [c if c else undef_color for c in self.tris.colors]
 
     def add_to_mesh(self, mesh: bpy.types.Mesh):
-        mesh.from_pydata(self.verts, [], self.tris.indices)
+        mesh.from_pydata([Vector(v) for v in self.verts], [], self.tris.indices)
 
     def get_loop_colors(self):
         "Return colors in triangle loop creation order"

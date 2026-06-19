@@ -377,7 +377,7 @@ class ReadSTEP:
         #     print(ulen.ToCString(), uang.ToCString(), usld.ToCString())
 
         # default is MM
-        scale = 0.001
+        scale_stp = 0.001
 
         if ulen_names.Length() > 0:
             scaleval = ulen_names.Value(1).ToCString().lower()
@@ -401,16 +401,16 @@ class ReadSTEP:
             }
 
             if scaleval in scales:
-                scale = scales[scaleval]
+                scale_stp = scales[scaleval]
             else:
                 print("ERROR: Undefined scale:", scaleval)
 
-            print("Scale from file (meters per unit):", scaleval, scale)
+            print("Scale from file (meters per unit):", scaleval, scale_stp)
 
         else:
             print("Using default scale (millimeters)")
 
-        self.scale = scale
+        self.scale_stp = scale_stp # Unit per meter
 
         status = step_reader.ReadFile(self.filename)
         assert status == IFSelect_RetDone
@@ -443,7 +443,7 @@ class ReadSTEP:
     #     status = step_reader.ReadFile(fname)
     #     if status == IFSelect_RetDone:
     #         step_reader.Transfer(doc)
-    #     self.scale = 0.001
+    #     self.scale_stp = 0.001
 
     #     self.doc = doc
 
@@ -711,7 +711,7 @@ class ReadSTEP:
 
         return TriMesh(verts=verts, tris=tris_data)
 
-    def build_trimesh(self, shape, lin_def=0.8, ang_def=0.5, hacks=set([])) -> TriMesh:
+    def build_trimesh(self, shape, lin_def_bl_unit=0.8, ang_def=0.5, hacks=set([])) -> TriMesh:
         out_mesh = TriMesh()
         out_mesh.matrix = np.eye(4, dtype=np.float32)
 
@@ -746,7 +746,7 @@ class ReadSTEP:
                 self.import_problems["Empty shape"] += 1
                 continue
 
-            brepmesh = BRepMesh_IncrementalMesh(shp, lin_def, False, ang_def, False)
+            brepmesh = BRepMesh_IncrementalMesh(shp, lin_def_bl_unit*2*(self.scale_stp*1000), False, ang_def, False)
             brepmesh.Perform()
             trf = shp.Location().Transformation()
 

@@ -5,7 +5,6 @@ import numpy as np
 def scalemat(mat, sl):
     scaling = np.zeros_like(mat)
     scaling[np.diag_indices(4)] = sl
-    # print(scaling)
     return np.matmul(scaling, mat)
 
 
@@ -36,7 +35,7 @@ def set_obj_matrix_world(obj, mtx):
             obj.matrix_world[row][col] = mtx[row][col]
 
 
-def calculate_detail_level(dlev):
+def calculate_deflections_for_artist_friendly(dlev):
     """Angular deflection, Linear deflection"""
     if dlev < 100:
         l_def = 100.0 / float(dlev)
@@ -95,10 +94,11 @@ def transform_to_up(up, chosen_objects, scale, to_cursor=True):
         # scale
         mat = scalemat(mat, [*([scale] * 3), 1])
 
-        # move to cursor position
-        mat[0][3] += cursor_pos.x
-        mat[1][3] += cursor_pos.y
-        mat[2][3] += cursor_pos.z
+        if to_cursor:
+            # move to cursor position
+            mat[0][3] += cursor_pos.x
+            mat[1][3] += cursor_pos.y
+            mat[2][3] += cursor_pos.z
 
         # apply
         set_obj_matrix_world(obj, mat)

@@ -238,7 +238,7 @@ def build_mesh(
     step_reader,
     obj,
     shp,
-    lind,
+    lind_bl_unit,  # bl_unit
     angd,
     vcol_name="Colors",
     edges_as_seams=True,
@@ -253,7 +253,7 @@ def build_mesh(
     start_time = time.time()
 
     trimesh: TriMesh = step_reader.build_trimesh(
-        shp, lin_def=lind, ang_def=angd, hacks=hacks
+        shp, lin_def_bl_unit=lind_bl_unit, ang_def=angd, hacks=hacks
     )
 
     end_time = time.time()
@@ -316,10 +316,12 @@ def build_hierarchy_collection(tree, created_objs, filename):
         if len(hierarchy_collections.items()) > 0:
             for obj in created_objs:
                 parent_col_uuid = obj.get("STEP_parent", ROOT_PARENT)
-                parent_col = hierarchy_collections.get(parent_col_uuid, hierarchy_collections[-1])
+                parent_col = hierarchy_collections.get(
+                    parent_col_uuid, hierarchy_collections[-1]
+                )
                 parent_col.objects.link(obj)
-                global_t = tree.nodes[obj["STEP_tree_location"]].global_transform
-                set_obj_matrix_world(obj, global_t)
+                # global_t = tree.nodes[obj["STEP_tree_location"]].global_transform
+                # set_obj_matrix_world(obj, global_t)
 
     return hierarchy_collections
 
@@ -413,7 +415,9 @@ def build_collection_instances(instanced_objects, hierarchy_collections, scale):
             empty.empty_display_size = scale
             scale_translation(global_t, scale)
             set_obj_matrix_world(empty, global_t)
-            parent_col = hierarchy_collections.get(parent_uuid, hierarchy_collections[-1])
+            parent_col = hierarchy_collections.get(
+                parent_uuid, hierarchy_collections[-1]
+            )
             parent_col.objects.link(empty)
 
 
@@ -429,8 +433,9 @@ def load_step(
 ):
     # Find file
     from . import importer
+
     filename = "".join(ntpath.basename(filepath).split(".")[:-1])
-    
+
     # Try retrieve step_reader from cache
     if filepath not in GLOBAL_FILE_CACHE:
         try:
@@ -446,12 +451,12 @@ def load_step(
     # Init Reader
     tree = step_reader.tree
 
-    # Scale
-    scale = step_reader.scale
+    # Define final object scale
+    scale_final = 1/(step_reader.scale_stp*1000000)
     if custom_scale is not None:
-        scale = custom_scale
+        scale_final = custom_scale
     # Divide by Blender unit length
-    scale /= context.scene.unit_settings.scale_length
+    scale_final /= context.scene.unit_settings.scale_length
     print("Current Blender scale set at:", context.scene.unit_settings.scale_length)
 
     # Init data
@@ -496,12 +501,16 @@ def load_step(
                 source_obj = created_names[shape_name]
                 if htypes == HierarchyType.COLLECTION_INSTANCES:
                     if source_obj in instanced_objects:
-                        parent_for_instance = parent_uuid if parent_uuid != 0 else ROOT_PARENT
+                        parent_for_instance = (
+                            parent_uuid if parent_uuid != 0 else ROOT_PARENT
+                        )
                         instanced_objects[source_obj].append(
                             (shape_name, local_t, global_t, parent_for_instance)
                         )
                     else:
-                        parent_for_instance = parent_uuid if parent_uuid != 0 else ROOT_PARENT
+                        parent_for_instance = (
+                            parent_uuid if parent_uuid != 0 else ROOT_PARENT
+                        )
                         instanced_objects[source_obj] = [
                             (shape_name, local_t, global_t, parent_for_instance)
                         ]
@@ -565,9 +574,9 @@ def load_step(
             hierarchy_collections = build_hierarchy_collection(
                 tree, created_objs, filename
             )
-            build_collection_instances(instanced_objects, hierarchy_collections, scale)
+            build_collection_instances(instanced_objects, hierarchy_collections, scale_final)
 
-    transform_to_up(up_as[0], created_objs, scale)
+    transform_to_up(up_as[0], created_objs, scale_final)
 
     wm.progress_end()
     print(f"STEP loading time elapsed: {time.time()-start_time:.2f}")

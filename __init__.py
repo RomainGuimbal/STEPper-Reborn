@@ -26,12 +26,7 @@ from .object_generator import (
     build_mesh,
     GLOBAL_FILE_CACHE,
 )
-from .utils import calculate_detail_level
-
-# from collections import defaultdict
-
-# from .sizeof import total_size
-# utils.memorytrace_start()
+from .utils import calculate_deflections_for_artist_friendly
 
 axis_enum = [
     ("XPOS", "X", "", 0),
@@ -42,8 +37,36 @@ axis_enum = [
     # ("ZNEG", "Z-", "", 5),
 ]
 
+# In blender unit.
+lin_deflection_prop = bpy.props.FloatProperty(
+    name="Linear Deflection",
+    description="Max distance between the mesh and the theoretical shape. Smaller values increase polygon count",
+    default=0.002,  # 2mm (if STEP:mm  and blender:m)
+    soft_min=0.00001,  # 0.01mm
+    unit="LENGTH",
+    step=0.01,
+)
 
-class PG_Stepper(bpy.types.PropertyGroup):
+ang_deflection_prop = bpy.props.FloatProperty(
+    name="Angular Deflection",
+    description="Max angle between the tangent plane and the surrounding mesh of samples. Smaller values increase polygon count",
+    default=0.0872664,  # 5° (in radian)
+    soft_min=0.00174532925,  # 0.1°
+    min=0.000001745,  # 0.0001°
+    max=math.pi,
+    unit="ROTATION",
+    step=100,  # 1° (scalar)
+)
+
+detail_level_prop = bpy.props.IntProperty(
+    name="Mesh Detail",
+    description="How detailed you want the mesh to be",
+    default=100,
+    min=1,
+)
+
+
+class STEP_PG_properties(bpy.types.PropertyGroup):
     build_materials: bpy.props.BoolProperty(
         name="Build Materials",
         description="Build materials from STEP file colors",
@@ -58,38 +81,15 @@ class PG_Stepper(bpy.types.PropertyGroup):
 
     simpler_parameters: bpy.props.BoolProperty(
         name="Artist Friendly Parameters",
-        description="Instead of linear and angle deflection values, use only detail setting",
+        description="More intuitive parameters for visual look",
         default=False,
     )
 
-    detail_level: bpy.props.IntProperty(
-        name="Mesh Detail",
-        description="How detailed you want the mesh to be",
-        default=100,
-        min=1,
-    )
+    detail_level: detail_level_prop
 
-    # In meter. Must be multiplied by 2000 to match OCC deflection length.
-    lin_deflection: bpy.props.FloatProperty(
-        name="Linear Deflection",
-        description="Max distance between the mesh and the theoretical shape. Smaller values increase polygon count",
-        default=0.001,  # 1mm
-        min=0.00001,  # 0.01mm
-        unit="LENGTH",
-        step=0.01,
-    )
+    lin_deflection_bl_unit: lin_deflection_prop
 
-    # In radian. Must be multiplied by 2 to match OCC deflection angle.
-    ang_deflection: bpy.props.FloatProperty(
-        name="Angular Deflection",
-        description="Max angle between the tangent plane and the surrounding mesh of samples. Smaller values increase polygon count",
-        default=0.0872664,  # 5°
-        soft_min=0.00174532925,  # 0.1°
-        min=0.000001745,  # 0.0001°
-        max=math.pi,
-        unit="ROTATION",
-        step=100,  # 1°
-    )
+    ang_deflection: ang_deflection_prop
 
     fix_ascii_file: bpy.props.StringProperty(
         name="File",
@@ -97,12 +97,6 @@ class PG_Stepper(bpy.types.PropertyGroup):
         default="",
         maxlen=1024,
         subtype="FILE_PATH",
-    )
-
-    use_adaptive_resolution: bpy.props.BoolProperty(
-        name="Adaptive resolution",
-        description="Automatically adjust deflection values based on shape size",
-        default=True,
     )
 
     preferred_up_axis: bpy.props.EnumProperty(
@@ -155,38 +149,15 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
         description="Organization style of objects",
     )
 
-    user_scale: bpy.props.FloatProperty(
-        name="Scale", description="Set object scale", default=0.01, min=0.00001
+    scale_overwritten: bpy.props.FloatProperty(
+        name="Scale", description="Set object scale", default=0.001, soft_min=0.00001
     )
 
-    # In meter. Must be multiplied by 2000 to match OCC deflection length.
-    lin_deflection: bpy.props.FloatProperty(
-        name="Linear Deflection",
-        description="Max distance between the mesh and the theoretical shape. Smaller values increase polygon count",
-        default=0.001,  # 1mm
-        min=0.00001,  # 0.01mm
-        unit="LENGTH",
-        step=0.01,
-    )
+    lin_deflection_bl_unit: lin_deflection_prop
 
-    ang_deflection: bpy.props.FloatProperty(
-        name="Angular Deflection",
-        description="Max angle between the tangent plane and the surrounding mesh of samples. Smaller values increase polygon count",
-        default=0.0872664,  # 5°
-        soft_min=0.00174532925,  # 0.1°
-        min=0.000001745,  # 0.0001°
-        max=math.pi,
-        unit="ROTATION",
-        step=100,  # 1°
-        # set_transform=convert()
-    )
+    ang_deflection: ang_deflection_prop
 
-    detail_level: bpy.props.IntProperty(
-        name="Mesh Detail",
-        description="How detailed you want the mesh to be",
-        default=100,
-        min=1,
-    )
+    detail_level: detail_level_prop
 
     custom_scale: bpy.props.BoolProperty(
         name="Custom Scale",
@@ -229,7 +200,7 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
             sub.prop(self, "custom_scale", text="")
             sub = sub.row(align=True)
             sub.active = self.custom_scale
-            sub.prop(self, "user_scale", text="")
+            sub.prop(self, "scale_overwritten", text="")
 
         header, body = layout.panel("Resolution", default_closed=False)
         header.label(text="Resolution")
@@ -240,16 +211,17 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
             if bpy.context.scene.stepper.simpler_parameters:
                 col.prop(self, "detail_level")
             else:
-                col.prop(self, "lin_deflection")
+                col.prop(self, "lin_deflection_bl_unit")
                 col.prop(self, "ang_deflection")
 
             # row = col.row()
             # row.prop(prg, "fw_as")
 
     def execute(self, context):
-        l_def, a_def = self.lin_deflection * 2000, self.ang_deflection
+        l_def = self.lin_deflection_bl_unit
+        a_def = self.ang_deflection
         if bpy.context.scene.stepper.simpler_parameters:
-            a_def, l_def = calculate_detail_level(self.detail_level)
+            a_def, l_def = calculate_deflections_for_artist_friendly(self.detail_level)
 
         import_files = [i.name for i in self.files]
 
@@ -276,7 +248,7 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
             result = load_step(
                 context,
                 path_to_file,
-                custom_scale=self.user_scale if self.custom_scale else None,
+                custom_scale=self.scale_overwritten if self.custom_scale else None,
                 lin_deflection=l_def,
                 ang_deflection=a_def,
                 up_as=self.up_as,
@@ -421,11 +393,12 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
         prev_mode = context.mode
         bpy.ops.object.mode_set(mode="OBJECT")
 
-        lin_def = context.scene.stepper.lin_deflection * 2000
+        lin_def = context.scene.stepper.lin_deflection_bl_unit
         ang_def = context.scene.stepper.ang_deflection
+
         # merge_distance = context.scene.stepper.merge_distance
         if bpy.context.scene.stepper.simpler_parameters:
-            ang_def, lin_def = calculate_detail_level(
+            ang_def, lin_def = calculate_deflections_for_artist_friendly(
                 bpy.context.scene.stepper.detail_level
             )
 
@@ -506,7 +479,7 @@ class STEP_PT_side_panel(bpy.types.Panel):
 
         else:
             row = col.row()
-            row.prop(prg, "lin_deflection")
+            row.prop(prg, "lin_deflection_bl_unit")
 
             row = col.row()
             row.prop(prg, "ang_deflection")
@@ -615,7 +588,7 @@ def menu_func_import(self, context):
 
 
 classes = (
-    PG_Stepper,
+    STEP_PG_properties,
     STEP_OT_ImportStepCADOperator,
     STEP_OT_ClearCache,
     STEP_OT_RebuildSelected,
@@ -632,7 +605,7 @@ classes = (
 def register():
     for c in classes:
         bpy.utils.register_class(c)
-    bpy.types.Scene.stepper = bpy.props.PointerProperty(type=PG_Stepper)
+    bpy.types.Scene.stepper = bpy.props.PointerProperty(type=STEP_PG_properties)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
 
 
@@ -641,7 +614,3 @@ def unregister():
         bpy.utils.unregister_class(c)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     del bpy.types.Scene.stepper
-
-
-if __package__ == "__main__":
-    register()

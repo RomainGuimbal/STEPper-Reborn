@@ -60,7 +60,7 @@ ang_deflection_prop = bpy.props.FloatProperty(
 
 detail_level_prop = bpy.props.IntProperty(
     name="Mesh Detail",
-    description="How detailed you want the mesh to be",
+    description="Higher values means higher polygon count",
     default=100,
     min=1,
 )
@@ -108,20 +108,19 @@ class STEP_PG_properties(bpy.types.PropertyGroup):
 
 
 class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
-    bl_idname = "object.occ_import_step"
+    bl_idname = "wm.occ_import_step"
     bl_label = "Import STEP"
     bl_description = "Import a STEP file"
     bl_options = {"PRESET"}
 
     filter_glob: StringProperty(default="*.step;*.stp;*.st", options={"HIDDEN"})
     files: bpy.props.CollectionProperty(type=bpy.types.PropertyGroup)
-    # files: bpy.props.CollectionProperty(type=idprop.types.IDPropertyGroup)
     override_file: StringProperty(default="", options={"HIDDEN"})
 
     fw_as: bpy.props.EnumProperty(
         items=axis_enum,
         name="Forward",
-        default="ZPOS",
+        default="YPOS",
         description="Forward axis of the imported model",
     )
 
@@ -129,6 +128,7 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
         items=axis_enum,
         name="Up Axis",
         description="Up axis of the imported model",
+        default="ZPOS",
     )
 
     hierarchy_type: bpy.props.EnumProperty(
@@ -218,6 +218,7 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
             # row.prop(prg, "fw_as")
 
     def execute(self, context):
+        result = None
         l_def = self.lin_deflection_bl_unit
         a_def = self.ang_deflection
         if bpy.context.scene.stepper.simpler_parameters:
@@ -257,7 +258,7 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
 
         # --- End of VizTracer block ---
 
-        if result:
+        if result is not None:
             return {"FINISHED"}
         else:
             self.report(

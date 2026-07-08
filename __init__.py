@@ -40,7 +40,7 @@ axis_enum = [
 # In blender unit.
 lin_deflection_prop = bpy.props.FloatProperty(
     name="Linear Deflection",
-    description="Max distance between the mesh and the theoretical shape. Smaller values increase polygon count",
+    description="Max distance between the mesh and the theoretical shape. Smaller values increase polygon count. In Blender unit",
     default=0.002,  # 2mm (if STEP:mm  and blender:m)
     soft_min=0.00001,  # 0.01mm
     unit="LENGTH",
@@ -244,11 +244,11 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
         # iterate through the selected files
         for _, i in enumerate(import_files):
             # generate full path to file
-            path_to_file = os.path.join(folder, i)
-            print("Opening file:", path_to_file)
+            filepath = os.path.join(folder, i)
+            print("Opening file:", filepath)
             result = load_step(
                 context,
-                path_to_file,
+                filepath,
                 custom_scale=self.scale_overwritten if self.custom_scale else None,
                 lin_deflection=l_def,
                 ang_deflection=a_def,
@@ -273,13 +273,6 @@ class STEP_OT_ClearCache(bpy.types.Operator):
     bl_description = "Clear STEP cache, enabling the reload of a file"
 
     def execute(self, context):
-        # global GLOBAL_FILE_CACHE
-        # items = list(GLOBAL_FILE_CACHE.values())
-        # for entry in items:
-        #     for i, shp in enumerate(entry):
-        #         label, color, tag = entry[shp]
-        #         # shp.Nullify()
-
         GLOBAL_FILE_CACHE.clear()
         return {"FINISHED"}
 
@@ -322,39 +315,6 @@ class STEP_OT_FixASCII(bpy.types.Operator):
             "Operation finished.",
         )
         return {"FINISHED"}
-
-
-class STEP_OT_PrintDebug(bpy.types.Operator):
-    bl_idname = "object.occ_print_debug"
-    bl_label = "Print STEP debug info"
-    bl_description = "Print STEP debug info"
-
-    def execute(self, context):
-        from pathlib import Path
-
-        print("Attempting to format STEP file as ASCII")
-        i_file = context.scene.stepper.print_debug
-        p = Path(i_file)
-        if i_file == "" or not p.exists():
-            self.report(
-                {"ERROR"},
-                "File does not exist.",
-            )
-            return {"FINISHED"}
-
-        print(p.stat().st_size // 1024, "kB")
-
-        from . import stepanalyzer
-
-        SA = stepanalyzer.StepAnalyzer(filename=p)
-        print(SA.dump())
-
-        self.report(
-            {"INFO"},
-            "Operation finished.",
-        )
-        return {"FINISHED"}
-
 
 class STEP_OT_ReloadSTEP(bpy.types.Operator):
     bl_idname = "object.occ_reload_step"
@@ -595,7 +555,6 @@ classes = (
     STEP_OT_RebuildSelected,
     STEP_OT_ReloadSTEP,
     STEP_OT_FixASCII,
-    STEP_OT_PrintDebug,
     STEP_PT_side_panel,
     STEP_PT_side_panel_Reload,
     STEP_PT_side_panel_Debug,

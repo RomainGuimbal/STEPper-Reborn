@@ -59,6 +59,20 @@ from OCP.XCAFDoc import (
     XCAFDoc_ColorCurv,
 )
 from OCP.XSControl import XSControl_WorkSession
+from OCP.UnitsMethods import (
+    UnitsMethods_LengthUnit_Undefined,
+    UnitsMethods_LengthUnit_Inch,
+    UnitsMethods_LengthUnit_Millimeter,
+    UnitsMethods_LengthUnit_Foot,
+    UnitsMethods_LengthUnit_Mile,
+    UnitsMethods_LengthUnit_Meter,
+    UnitsMethods_LengthUnit_Kilometer,
+    UnitsMethods_LengthUnit_Mil,
+    UnitsMethods_LengthUnit_Micron,
+    UnitsMethods_LengthUnit_Centimeter,
+    UnitsMethods_LengthUnit_Microinch,
+)
+from OCP.Interface import Interface_Static
 
 from .trimesh import TrianglesData, TriMesh
 
@@ -242,8 +256,9 @@ class ShapeTree:
 
 
 class ReadSTEP:
-    def __init__(self, filename):
-        self.read_file(filename)
+    def __init__(self, filepath):
+        self.filepath = filepath
+        self.read_file()
 
     def query_color(self, lab, overwrite=False):
         """
@@ -334,28 +349,29 @@ class ReadSTEP:
 
         return " " + res + " "
 
-    def transfer_with_units(self, filename):
-        print("Init transfer with units")
+    def transfer(self):
+        file = self.filepath
+
+        # Create the XCAF document
+        app = XCAFApp_Application.GetApplication_s()
+        doc = TDocStd_Document(TCollection_ExtendedString("XmlXCAF"))
+        app.NewDocument(TCollection_ExtendedString("MDTV-XCAF"), doc)
 
         # Init new doc and reader
-        doc = TDocStd_Document(TCollection_ExtendedString("STEP"))
-        step_reader = STEPCAFControl_Reader()
-        step_reader.SetColorMode(True)
-        step_reader.SetNameMode(True)
-        step_reader.SetMatMode(True)
-        step_reader.SetLayerMode(True)
+        reader = STEPCAFControl_Reader()
+        reader.SetColorMode(True)
+        reader.SetNameMode(True)
+        # reader.SetMatMode(True)
+        # reader.SetLayerMode(True)
 
+        # Scale
         # Read simple STEP file for correct units
         session = XSControl_WorkSession()
         step_simple_reader = STEPControl_Reader(session)
 
-        print("DataExchange: Reading STEP")
-
-        status = step_simple_reader.ReadFile(filename)
+        status = step_simple_reader.ReadFile(file)
         if status != IFSelect_RetDone:
             raise AssertionError("Error: can't read file. File possibly damaged.")
-
-        print("STEP read into memory")
 
         # https://dev.opencascade.org/content/loading-step-file-crashes-edgeloop
         # Default is 1, try also 0
@@ -376,85 +392,98 @@ class ReadSTEP:
         #     usld = usld_names.Value(i + 1)
         #     print(ulen.ToCString(), uang.ToCString(), usld.ToCString())
 
-        # default is MM
-        scale_stp = 0.001
-
         if ulen_names.Length() > 0:
             scaleval = ulen_names.Value(1).ToCString().lower()
 
-            # INCH, MM, FT, MI, M, KM, MIL, CM
-            # UM, UIN ??
-
-            scales = {
-                "millimeter": 0.001,
-                "millimetre": 0.001,
-                "centimeter": 0.01,
-                "centimetre": 0.01,
-                "kilometer": 1000.0,
-                "kilometre": 1000.0,
-                "meter": 1.0,
-                "metre": 1.0,
-                "inch": 0.0254,
-                "foot": 0.3048,
-                "mile": 1609.34,
-                "mil": 0.0254 * 0.001,
+            scales_map = {
+                "millimeter": 1,
+                "millimetre": 1,
+                "centimeter": 10,
+                "centimetre": 10,
+                "kilometer": 1000000.0,
+                "kilometre": 1000000.0,
+                "meter": 1000.0,
+                "metre": 1000.0,
+                "inch": 25.4,
+                "foot": 304.8,
+                "mile": 1609340,
+                "mil": 0.0254,
             }
 
-            if scaleval in scales:
-                scale_stp = scales[scaleval]
-            else:
-                print("ERROR: Undefined scale:", scaleval)
+            scale = scales_map.get(scaleval, 1.0)
+            print(scale)
+            XCAFDoc_DocumentTool.SetLengthUnit_s(
+                doc, scale, UnitsMethods_LengthUnit_Meter
+            )
+        # # Read simple STEP file for correct units
+        # # session = XSControl_WorkSession()
+        # # base_reader = STEPControl_Reader(session)
 
-            print("Scale from file (meters per unit):", scaleval, scale_stp)
+        # # read units
+        # # Peek at what OCCT actually detected BEFORE transfer/scaling happens
+        # base_reader = reader.ChangeReader()
+        # ulen_names = TColStd_SequenceOfAsciiString()
+        # uang_names = TColStd_SequenceOfAsciiString()
+        # usld_names = TColStd_SequenceOfAsciiString()
+        # base_reader.FileUnits(ulen_names, uang_names, usld_names)
 
-        else:
-            print("Using default scale (millimeters)")
+        # for i in range(1, ulen_names.Length() + 1):
+        #     print("Detected length unit:", ulen_names.Value(i).ToCString())
 
-        self.scale_stp = scale_stp # Unit per meter
+        # if ulen_names.Length() > 0:
+        #     scaleval = ulen_names.Value(1).ToCString().lower()
 
-        status = step_reader.ReadFile(self.filename)
-        assert status == IFSelect_RetDone
+        #     # UM, UIN ??
+        #     scales_map = {
+        #         # UnitsMethods_LengthUnit_Micron
+        #         # UnitsMethods_LengthUnit_Microinch
+        #         "millimeter": UnitsMethods_LengthUnit_Millimeter,
+        #         "millimetre": UnitsMethods_LengthUnit_Millimeter,
+        #         "centimeter": UnitsMethods_LengthUnit_Centimeter,
+        #         "centimetre": UnitsMethods_LengthUnit_Centimeter,
+        #         "kilometer": UnitsMethods_LengthUnit_Kilometer,
+        #         "kilometre": UnitsMethods_LengthUnit_Kilometer,
+        #         "meter": UnitsMethods_LengthUnit_Meter,
+        #         "metre": UnitsMethods_LengthUnit_Meter,
+        #         "inch": UnitsMethods_LengthUnit_Inch,
+        #         "foot": UnitsMethods_LengthUnit_Foot,
+        #         "mile": UnitsMethods_LengthUnit_Mile,
+        #         "mil": UnitsMethods_LengthUnit_Mil,
+        #     }
+        #     XCAFDoc_DocumentTool.SetLengthUnit_s(
+        #         doc, 1.0, scales_map.get(scaleval, UnitsMethods_LengthUnit_Undefined)
+        #     )
+        # a= 0.001
+        # XCAFDoc_DocumentTool.GetLengthUnit_s(doc, a)
 
-        print("DataExchange: Transferring")
-        # print("Roots:", step_reader.NbRootsForTransfer())
-        transfer_result = step_reader.Transfer(doc)
-        if not transfer_result:
-            print("Dataexchange transfer FAILED.")
+        # XCAFDoc_DocumentTool.SetLengthUnit_s(doc, 1.0, UnitsMethods_LengthUnit_Meter)
+
+        # Read
+        status = reader.ReadFile(file)
+        if status != IFSelect_RetDone:
+            raise RuntimeError(f"Failed to read STEP file: {file}")
+
+        if not reader.Transfer(doc):
+            raise RuntimeError(
+                f"Failed to transfer STEP data into XCAF document: {file}"
+            )
         else:
             print("DataExchange: Transfer done")
 
+        self.scale_stp = 1
+
         self.doc = doc
 
-    # def transfer_simple(self, fname):
-    #     # see stepanalyzer.py for license details
-    #     print("Init simple transfer")
+    def read_file(self):
+        """Returns list of tuples (topods_shape, label, color)
+        Use OCAF.
+        """
 
-    #     # Create the application, empty document and shape_tool
-    #     doc = TDocStd_Document(TCollection_ExtendedString("STEP"))
-    #     app = XCAFApp_Application.GetApplication()
-    #     app.NewDocument("MDTV-XCAF", doc)
+        # Init Reader
+        if not os.path.isfile(self.filepath):
+            raise FileNotFoundError("%s not found." % self.filepath)
 
-    #     # Read file and return populated doc
-    #     step_reader = STEPCAFControl_Reader()
-    #     step_reader.SetColorMode(True)
-    #     step_reader.SetLayerMode(True)
-    #     step_reader.SetNameMode(True)
-    #     step_reader.SetMatMode(True)
-    #     status = step_reader.ReadFile(fname)
-    #     if status == IFSelect_RetDone:
-    #         step_reader.Transfer(doc)
-    #     self.scale_stp = 0.001
-
-    #     self.doc = doc
-
-    def init_reader(self, filename):
-        if not os.path.isfile(filename):
-            raise FileNotFoundError("%s not found." % filename)
-
-        # self.filename = force_ascii(filename)
-        self.filename = filename
-
-        self.transfer_with_units(self.filename)
+        self.transfer()
         # self.transfer_simple(self.filename)
 
         self.shape_tool = XCAFDoc_DocumentTool.ShapeTool_s(self.doc.Main())
@@ -477,13 +506,6 @@ class ReadSTEP:
             "Undefined normals": 0,
             "Empty shape": 0,
         }
-
-    def read_file(self, filename):
-        """Returns list of tuples (topods_shape, label, color)
-        Use OCAF.
-        """
-
-        self.init_reader(filename)
 
         def _set_color_and_get_priority(shape_label, shape):
             """Type == Priority here"""
@@ -711,7 +733,9 @@ class ReadSTEP:
 
         return TriMesh(verts=verts, tris=tris_data)
 
-    def build_trimesh(self, shape, lin_def_bl_unit=0.8, ang_def=0.5, hacks=set([])) -> TriMesh:
+    def build_trimesh(
+        self, shape, lin_def_bl_unit=0.8, ang_def=0.5, hacks=set([])
+    ) -> TriMesh:
         out_mesh = TriMesh()
         out_mesh.matrix = np.eye(4, dtype=np.float32)
 
@@ -746,7 +770,16 @@ class ReadSTEP:
                 self.import_problems["Empty shape"] += 1
                 continue
 
-            brepmesh = BRepMesh_IncrementalMesh(shp, lin_def_bl_unit*2*(self.scale_stp*1000), False, ang_def, False)
+            brepmesh = BRepMesh_IncrementalMesh(
+                shp,
+                lin_def_bl_unit
+                * 2
+                * self.scale_stp
+                * 1000,  # *2 probably because tolerence range and not max distance
+                False,
+                ang_def,
+                False,
+            )
             brepmesh.Perform()
             trf = shp.Location().Transformation()
 

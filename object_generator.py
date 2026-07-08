@@ -320,8 +320,8 @@ def build_hierarchy_collection(tree, created_objs, filename):
                     parent_col_uuid, hierarchy_collections[-1]
                 )
                 parent_col.objects.link(obj)
-                # global_t = tree.nodes[obj["STEP_tree_location"]].global_transform
-                # set_obj_matrix_world(obj, global_t)
+                global_t = tree.nodes[obj["STEP_tree_location"]].global_transform
+                set_obj_matrix_world(obj, global_t)
 
     return hierarchy_collections
 
@@ -448,11 +448,11 @@ def load_step(
         step_reader = GLOBAL_FILE_CACHE[filepath]
         print("Loaded file from cache")
 
-    # Init Reader
+    # Get Tree
     tree = step_reader.tree
 
     # Define final object scale
-    scale_final = 1/(step_reader.scale_stp*1000000)
+    scale_final = step_reader.scale_stp
     if custom_scale is not None:
         scale_final = custom_scale
     # Divide by Blender unit length

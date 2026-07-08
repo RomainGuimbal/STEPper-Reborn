@@ -393,7 +393,7 @@ class ReadSTEP:
         #     print(ulen.ToCString(), uang.ToCString(), usld.ToCString())
 
         if ulen_names.Length() > 0:
-            scaleval = ulen_names.Value(1).ToCString().lower()
+            unitname = ulen_names.Value(1).ToCString().lower()
 
             scales_map = {
                 "millimeter": 1,
@@ -410,53 +410,11 @@ class ReadSTEP:
                 "mil": 0.0254,
             }
 
-            scale = scales_map.get(scaleval, 1.0)
+            scale = scales_map.get(unitname, 1.0)
             print(scale)
             XCAFDoc_DocumentTool.SetLengthUnit_s(
                 doc, scale, UnitsMethods_LengthUnit_Meter
             )
-        # # Read simple STEP file for correct units
-        # # session = XSControl_WorkSession()
-        # # base_reader = STEPControl_Reader(session)
-
-        # # read units
-        # # Peek at what OCCT actually detected BEFORE transfer/scaling happens
-        # base_reader = reader.ChangeReader()
-        # ulen_names = TColStd_SequenceOfAsciiString()
-        # uang_names = TColStd_SequenceOfAsciiString()
-        # usld_names = TColStd_SequenceOfAsciiString()
-        # base_reader.FileUnits(ulen_names, uang_names, usld_names)
-
-        # for i in range(1, ulen_names.Length() + 1):
-        #     print("Detected length unit:", ulen_names.Value(i).ToCString())
-
-        # if ulen_names.Length() > 0:
-        #     scaleval = ulen_names.Value(1).ToCString().lower()
-
-        #     # UM, UIN ??
-        #     scales_map = {
-        #         # UnitsMethods_LengthUnit_Micron
-        #         # UnitsMethods_LengthUnit_Microinch
-        #         "millimeter": UnitsMethods_LengthUnit_Millimeter,
-        #         "millimetre": UnitsMethods_LengthUnit_Millimeter,
-        #         "centimeter": UnitsMethods_LengthUnit_Centimeter,
-        #         "centimetre": UnitsMethods_LengthUnit_Centimeter,
-        #         "kilometer": UnitsMethods_LengthUnit_Kilometer,
-        #         "kilometre": UnitsMethods_LengthUnit_Kilometer,
-        #         "meter": UnitsMethods_LengthUnit_Meter,
-        #         "metre": UnitsMethods_LengthUnit_Meter,
-        #         "inch": UnitsMethods_LengthUnit_Inch,
-        #         "foot": UnitsMethods_LengthUnit_Foot,
-        #         "mile": UnitsMethods_LengthUnit_Mile,
-        #         "mil": UnitsMethods_LengthUnit_Mil,
-        #     }
-        #     XCAFDoc_DocumentTool.SetLengthUnit_s(
-        #         doc, 1.0, scales_map.get(scaleval, UnitsMethods_LengthUnit_Undefined)
-        #     )
-        # a= 0.001
-        # XCAFDoc_DocumentTool.GetLengthUnit_s(doc, a)
-
-        # XCAFDoc_DocumentTool.SetLengthUnit_s(doc, 1.0, UnitsMethods_LengthUnit_Meter)
 
         # Read
         status = reader.ReadFile(file)

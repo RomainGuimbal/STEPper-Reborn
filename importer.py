@@ -383,38 +383,36 @@ class ReadSTEP:
         usld_names = TColStd_SequenceOfAsciiString()
         step_simple_reader.FileUnits(ulen_names, uang_names, usld_names)
 
-        # Info about unit conversions
-        # https://dev.opencascade.org/content/step-unit-conversion-and-meshing
+        # # Info about unit conversions
+        # # https://dev.opencascade.org/content/step-unit-conversion-and-meshing
 
-        # for i in range(ulen_names.Length()):
-        #     ulen = ulen_names.Value(i + 1)
-        #     uang = uang_names.Value(i + 1)
-        #     usld = usld_names.Value(i + 1)
-        #     print(ulen.ToCString(), uang.ToCString(), usld.ToCString())
+        # # for i in range(ulen_names.Length()):
+        # #     ulen = ulen_names.Value(i + 1)
+        # #     uang = uang_names.Value(i + 1)
+        # #     usld = usld_names.Value(i + 1)
+        # #     print(ulen.ToCString(), uang.ToCString(), usld.ToCString())
 
-        if ulen_names.Length() > 0:
-            unitname = ulen_names.Value(1).ToCString().lower()
+        # if ulen_names.Length() > 0:
+        #     unitname = ulen_names.Value(1).ToCString().lower()
 
-            scales_map = {
-                "millimeter": 1,
-                "millimetre": 1,
-                "centimeter": 10,
-                "centimetre": 10,
-                "kilometer": 1000000.0,
-                "kilometre": 1000000.0,
-                "meter": 1000.0,
-                "metre": 1000.0,
-                "inch": 25.4,
-                "foot": 304.8,
-                "mile": 1609340,
-                "mil": 0.0254,
-            }
+        #     scales_map = {
+        #         "millimeter": 1,
+        #         "millimetre": 1,
+        #         "centimeter": 10,
+        #         "centimetre": 10,
+        #         "kilometer": 1000000.0,
+        #         "kilometre": 1000000.0,
+        #         "meter": 1000.0,
+        #         "metre": 1000.0,
+        #         "inch": 25.4,
+        #         "foot": 304.8,
+        #         "mile": 1609340,
+        #         "mil": 0.0254,
+        #     }
 
-            scale = scales_map.get(unitname, 1.0)
-            print(scale)
-            XCAFDoc_DocumentTool.SetLengthUnit_s(
-                doc, scale, UnitsMethods_LengthUnit_Meter
-            )
+        #     scale = scales_map.get(unitname, 1.0)
+        #     print(scale)
+        XCAFDoc_DocumentTool.SetLengthUnit_s(doc, 1, UnitsMethods_LengthUnit_Meter)
 
         # Read
         status = reader.ReadFile(file)
@@ -428,7 +426,6 @@ class ReadSTEP:
         else:
             print("DataExchange: Transfer done")
 
-        self.scale_stp = 1
 
         self.doc = doc
 
@@ -731,9 +728,7 @@ class ReadSTEP:
             brepmesh = BRepMesh_IncrementalMesh(
                 shp,
                 lin_def_bl_unit
-                * 2
-                * self.scale_stp
-                * 1000,  # *2 probably because tolerence range and not max distance
+                * 2,  # probably because tolerence range and not max distance
                 False,
                 ang_def,
                 False,

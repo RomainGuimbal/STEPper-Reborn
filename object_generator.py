@@ -452,7 +452,7 @@ def load_step(
     tree = step_reader.tree
 
     # Define final object scale
-    scale_final = step_reader.scale_stp
+    scale_final = 1.0
     if custom_scale is not None:
         scale_final = custom_scale
     # Divide by Blender unit length

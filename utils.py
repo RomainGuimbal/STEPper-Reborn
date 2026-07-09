@@ -1,5 +1,6 @@
 import bpy
 import numpy as np
+import math
 
 
 def scalemat(mat, sl):
@@ -36,12 +37,20 @@ def set_obj_matrix_world(obj, mtx):
 
 
 def calculate_deflections_for_artist_friendly(dlev):
-    """Angular deflection, Linear deflection"""
-    if dlev < 100:
-        l_def = 100.0 / float(dlev)
-    else:
-        l_def = (100.0 / float(dlev)) ** 2.0
-    return 0.8, l_def
+    """
+    Angular deflection, Linear deflection. From detail level
+    """
+    # curve passing through (1,100), (100,0.002), (1000,0.00001)
+    # arbitrary values which make sense
+    # Factors comes from :
+    # 5/3-3/2*log(500) ~= -2.3818
+    # 1/2*log(500)-4/3 ~= 0.016152
+
+    l_def = 100 * 10 ** (
+        -2.3818 * math.log10(dlev) + 0.016152 * (math.log10(dlev)) ** 2
+    )
+
+    return 1.5, l_def
 
 
 def create_new_obj_with_mesh(name, set_active=True):

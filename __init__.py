@@ -37,6 +37,19 @@ axis_enum = [
     # ("ZNEG", "Z-", "", 5),
 ]
 
+hierarchy_enum = [
+    (str(int(HierarchyType.COLLECTION_FLAT)), "Flat Collection", "", 0),
+    (str(int(HierarchyType.COLLECTION_TREE)), "Collection Tree", "", 1),
+    (str(int(HierarchyType.EMPTIES_TREE)), "Parented Empties", "", 2),
+    # (str(int(HierarchyType.COLLECTION_FLAT_AND_TREE)), "Flat and tree collection", "", 3),
+    (
+        str(int(HierarchyType.COLLECTION_INSTANCES)),
+        "Collection instances",
+        "",
+        4,
+    ),
+]
+
 # In blender unit.
 lin_deflection_prop = bpy.props.FloatProperty(
     name="Linear Deflection",
@@ -58,11 +71,12 @@ ang_deflection_prop = bpy.props.FloatProperty(
     step=100,  # 1° (scalar)
 )
 
-detail_level_prop = bpy.props.IntProperty(
-    name="Mesh Detail",
+single_detail_val_prop = bpy.props.IntProperty(
+    name="Detail",
     description="Higher values means higher polygon count",
     default=100,
     min=1,
+    soft_max=1000,
 )
 
 
@@ -79,13 +93,13 @@ class STEP_PG_properties(bpy.types.PropertyGroup):
         default=False,
     )
 
-    simpler_parameters: bpy.props.BoolProperty(
-        name="Artist Friendly Parameters",
-        description="More intuitive parameters for visual look",
+    use_detail_val: bpy.props.BoolProperty(
+        name="Simple Resolution",
+        description="More intuitive resolution parameter for visual look",
         default=False,
     )
 
-    detail_level: detail_level_prop
+    single_detail_val: single_detail_val_prop
 
     lin_deflection_bl_unit: lin_deflection_prop
 
@@ -101,9 +115,16 @@ class STEP_PG_properties(bpy.types.PropertyGroup):
 
     preferred_up_axis: bpy.props.EnumProperty(
         items=axis_enum,
-        name="preferred Up Axis",
+        name="Preferred Up Axis",
         default=axis_enum[2][0],
-        description="Preselected up axis at import",
+        description="Preselected up axis at first import",
+    )
+
+    preferred_hierarchy_type: bpy.props.EnumProperty(
+        items=hierarchy_enum,
+        name="Preferred Hierarchy Type",
+        default=hierarchy_enum[1][0],
+        description="Preselected hierarchy type at first import",
     )
 
 
@@ -132,21 +153,16 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
     )
 
     hierarchy_type: bpy.props.EnumProperty(
-        items=[
-            (str(int(HierarchyType.COLLECTION_FLAT)), "Flat collection", "", 0),
-            (str(int(HierarchyType.COLLECTION_TREE)), "Tree collection", "", 1),
-            (str(int(HierarchyType.EMPTIES_TREE)), "Parented empties", "", 2),
-            # (str(int(HierarchyType.COLLECTION_FLAT_AND_TREE)), "Flat and tree collection", "", 3),
-            (
-                str(int(HierarchyType.COLLECTION_INSTANCES)),
-                "Collection instances",
-                "",
-                4,
-            ),
-        ],
+        items=hierarchy_enum,
         name="Tree hierarchy",
         default=str(int(HierarchyType.COLLECTION_TREE)),
         description="Organization style of objects",
+    )
+
+    custom_scale: bpy.props.BoolProperty(
+        name="Custom Scale",
+        description="Instead of loading the unit information from the file, determine it manually",
+        default=False,
     )
 
     scale_overwritten: bpy.props.FloatProperty(
@@ -157,13 +173,11 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
 
     ang_deflection: ang_deflection_prop
 
-    detail_level: detail_level_prop
-
-    custom_scale: bpy.props.BoolProperty(
-        name="Custom Scale",
-        description="Instead of loading the unit information from the file, determine it manually",
-        default=False,
+    use_detail_val: bpy.props.BoolProperty(
+        name="Simple Mode", description="", default=False
     )
+
+    single_detail_val: single_detail_val_prop
 
     ran: bpy.props.BoolProperty(
         name="Operator Already ran in this session",
@@ -172,6 +186,8 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
     def invoke(self, context, event):
         if not self.ran:
             self.up_as = context.scene.stepper.preferred_up_axis
+            self.use_detail_val = context.scene.stepper.use_detail_val
+            self.hierarchy_type = context.scene.stepper.preferred_hierarchy_type
             self.ran = True
         context.window_manager.fileselect_add(self)
         return {"RUNNING_MODAL"}
@@ -208,8 +224,9 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
             # row = col.row()
             # row.prop(self, "merge_distance")
             col = body.column()
-            if bpy.context.scene.stepper.simpler_parameters:
-                col.prop(self, "detail_level")
+            col.prop(self, "use_detail_val")
+            if self.use_detail_val:
+                col.prop(self, "single_detail_val")
             else:
                 col.prop(self, "lin_deflection_bl_unit")
                 col.prop(self, "ang_deflection")
@@ -221,8 +238,10 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
         result = None
         l_def = self.lin_deflection_bl_unit
         a_def = self.ang_deflection
-        if bpy.context.scene.stepper.simpler_parameters:
-            a_def, l_def = calculate_deflections_for_artist_friendly(self.detail_level)
+        if self.use_detail_val:
+            a_def, l_def = calculate_deflections_for_artist_friendly(
+                self.single_detail_val
+            )
 
         import_files = [i.name for i in self.files]
 
@@ -316,6 +335,7 @@ class STEP_OT_FixASCII(bpy.types.Operator):
         )
         return {"FINISHED"}
 
+
 class STEP_OT_ReloadSTEP(bpy.types.Operator):
     bl_idname = "object.occ_reload_step"
     bl_label = "Reload STEP"
@@ -358,9 +378,9 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
         ang_def = context.scene.stepper.ang_deflection
 
         # merge_distance = context.scene.stepper.merge_distance
-        if bpy.context.scene.stepper.simpler_parameters:
+        if bpy.context.scene.stepper.use_detail_val:
             ang_def, lin_def = calculate_deflections_for_artist_friendly(
-                bpy.context.scene.stepper.detail_level
+                bpy.context.scene.stepper.single_detail_val
             )
 
         # select all objs with the same meshes
@@ -433,11 +453,13 @@ class STEP_PT_side_panel(bpy.types.Panel):
 
         # row = col.row()
         # row.prop(prg, "merge_distance")
+        
+        row = col.row()
+        row.prop(prg, "use_detail_val")
 
-        if bpy.context.scene.stepper.simpler_parameters:
+        if prg.use_detail_val:
             row = col.row()
-            row.prop(prg, "detail_level")
-
+            row.prop(prg, "single_detail_val")
         else:
             row = col.row()
             row.prop(prg, "lin_deflection_bl_unit")
@@ -463,60 +485,60 @@ class STEP_PT_side_panel_Reload(bpy.types.Panel):
         row.operator(STEP_OT_ReloadSTEP.bl_idname, text="Reload STEP file")
 
 
-class STEP_PT_side_panel_Debug(bpy.types.Panel):
-    bl_label = "STEPper: Debug"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category = "Stepper"
+# class STEP_PT_side_panel_Debug(bpy.types.Panel):
+#     bl_label = "STEPper: Debug"
+#     bl_space_type = "VIEW_3D"
+#     bl_region_type = "UI"
+#     bl_category = "Stepper"
 
-    def draw(self, context):
-        layout = self.layout
+#     def draw(self, context):
+#         layout = self.layout
 
-        bxp = layout.box()
-        bxp.label(text="Enforce ASCII")
-        col = bxp.row().column(align=True)
+#         bxp = layout.box()
+#         bxp.label(text="Enforce ASCII")
+#         col = bxp.row().column(align=True)
 
-        prg = context.scene.stepper
-        row = col.row()
-        row.prop(prg, "fix_ascii_file")
-        row = col.row()
-        row.operator("object.occ_fix_ascii", text="Attempt fix STEP charset")
+#         prg = context.scene.stepper
+#         row = col.row()
+#         row.prop(prg, "fix_ascii_file")
+#         row = col.row()
+#         row.operator("object.occ_fix_ascii", text="Attempt fix STEP charset")
 
-        # row = layout.row()
-        # row.label(text="Error messages:")
+#         # row = layout.row()
+#         # row.label(text="Error messages:")
 
-        if (
-            context.object is not None
-            and "STEP_file" in context.object
-            and context.object["STEP_file"] in GLOBAL_FILE_CACHE
-        ):
-            bxp = layout.box()
-            bxp.label(text="Reported problems:")
+#         if (
+#             context.object is not None
+#             and "STEP_file" in context.object
+#             and context.object["STEP_file"] in GLOBAL_FILE_CACHE
+#         ):
+#             bxp = layout.box()
+#             bxp.label(text="Reported problems:")
 
-            row = bxp.row()
-            col = row.column(align=True)
-            step_reader = GLOBAL_FILE_CACHE[context.object["STEP_file"]]
-            for k, v in step_reader.import_problems.items():
-                row = col.row()
-                row.label(text=k + ": " + repr(v))
+#             row = bxp.row()
+#             col = row.column(align=True)
+#             step_reader = GLOBAL_FILE_CACHE[context.object["STEP_file"]]
+#             for k, v in step_reader.import_problems.items():
+#                 row = col.row()
+#                 row.label(text=k + ": " + repr(v))
 
-            bxs = layout.box()
-            bxs.label(text="Skipped shapes:")
+#             bxs = layout.box()
+#             bxs.label(text="Skipped shapes:")
 
-            row = bxs.row()
-            col = row.column(align=True)
-            if len(step_reader.skipped_shapes) > 0:
-                for v in step_reader.skipped_shapes:
-                    row = col.row()
-                    row.label(text=repr(v))
-            else:
-                row = col.row()
-                row.label(text="No skipped shapes")
+#             row = bxs.row()
+#             col = row.column(align=True)
+#             if len(step_reader.skipped_shapes) > 0:
+#                 for v in step_reader.skipped_shapes:
+#                     row = col.row()
+#                     row.label(text=repr(v))
+#             else:
+#                 row = col.row()
+#                 row.label(text="No skipped shapes")
 
-        else:
-            bxp = layout.box()
-            row = bxp.row()
-            row.label(text="Select active STEP object")
+#         else:
+#             bxp = layout.box()
+#             row = bxp.row()
+#             row.label(text="Select active STEP object")
 
 
 class STEP_AddonPreferences(bpy.types.AddonPreferences):
@@ -528,14 +550,14 @@ class STEP_AddonPreferences(bpy.types.AddonPreferences):
         col = layout.column()
         col.prop(bpy.context.scene.stepper, "build_materials")
         col.prop(bpy.context.scene.stepper, "hack_skip_zero_solids")
-        col.prop(bpy.context.scene.stepper, "simpler_parameters")
 
+        col = layout.column()
+        col.label(text="Default Values:")
         row = col.row(align=True)  # does nothing. Probably unsuported
         row.label(text="Preferred Up Axis")
         row.prop(bpy.context.scene.stepper, "preferred_up_axis", expand=True)
-
-        # col = layout.col()
-        # col.prop(bpy.context.scene.stepper, "hierarchy_type")
+        col.prop(bpy.context.scene.stepper, "preferred_hierarchy_type", expand=True)
+        col.prop(bpy.context.scene.stepper, "use_detail_val")
 
         # col.operator(PMM_OT_EnsurePIP.bl_idname, text="Ensure PIP")
         # col.operator(PMM_OT_UpgradePIP.bl_idname, text="Upgrade PIP")
@@ -557,7 +579,7 @@ classes = (
     STEP_OT_FixASCII,
     STEP_PT_side_panel,
     STEP_PT_side_panel_Reload,
-    STEP_PT_side_panel_Debug,
+    # STEP_PT_side_panel_Debug,
     STEP_AddonPreferences,
 )
 

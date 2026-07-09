@@ -453,7 +453,7 @@ class STEP_PT_side_panel(bpy.types.Panel):
 
         # row = col.row()
         # row.prop(prg, "merge_distance")
-        
+
         row = col.row()
         row.prop(prg, "use_detail_val")
 
@@ -550,18 +550,18 @@ class STEP_AddonPreferences(bpy.types.AddonPreferences):
         col = layout.column()
         col.prop(bpy.context.scene.stepper, "build_materials")
         col.prop(bpy.context.scene.stepper, "hack_skip_zero_solids")
+        col.prop(bpy.context.scene.stepper, "use_detail_val")
 
         col = layout.column()
         col.label(text="Default Values:")
-        row = col.row(align=True)  # does nothing. Probably unsuported
-        row.label(text="Preferred Up Axis")
-        row.prop(bpy.context.scene.stepper, "preferred_up_axis", expand=True)
-        col.prop(bpy.context.scene.stepper, "preferred_hierarchy_type", expand=True)
-        col.prop(bpy.context.scene.stepper, "use_detail_val")
 
-        # col.operator(PMM_OT_EnsurePIP.bl_idname, text="Ensure PIP")
-        # col.operator(PMM_OT_UpgradePIP.bl_idname, text="Upgrade PIP")
-        # col.operator(PMM_OT_PIPList.bl_idname, text="List")
+        row = col.row(align=True)  # does nothing. Probably unsuported
+        row.label(text="Up Axis")
+        row.prop(bpy.context.scene.stepper, "preferred_up_axis", expand=True)
+
+        row = col.row(align=True)
+        row.label(text="Hierarchy Type")
+        row.prop(bpy.context.scene.stepper, "preferred_hierarchy_type", expand=True)
 
 
 def menu_func_import(self, context):

@@ -402,7 +402,7 @@ def build_collection_instances(instanced_objects, hierarchy_collections, scale):
         empty.instance_type = "COLLECTION"
         empty.instance_collection = component_col
         empty.matrix_world = trsf
-        empty.empty_display_size = scale*0.001
+        empty.empty_display_size = scale * 0.001
         parent_collection.objects.link(empty)
 
         # instance copies
@@ -411,7 +411,7 @@ def build_collection_instances(instanced_objects, hierarchy_collections, scale):
             empty = bpy.data.objects.new(source_obj.name + "_instance", None)
             empty.instance_type = "COLLECTION"
             empty.instance_collection = component_col
-            empty.empty_display_size = scale*0.001
+            empty.empty_display_size = scale * 0.001
             scale_translation(global_t, scale)
             set_obj_matrix_world(empty, global_t)
             parent_col = hierarchy_collections.get(
@@ -532,7 +532,7 @@ def load_step(
         elif htypes == HierarchyType.EMPTIES_TREE:
             # Create empty
             obj = bpy.data.objects.new(obj_name, None)
-            obj.empty_display_size = 2
+            obj.empty_display_size = scale_final * 0.02
             obj.empty_display_type = "PLAIN_AXES"
             created_objs.append(obj)
             # set_obj_matrix_world(obj, global_t)
@@ -541,7 +541,7 @@ def load_step(
         if obj:
             # assign property to obj
             obj["STEP_tag"] = tag
-            obj_parent = parent_uuid #if parent_uuid != 0 else ROOT_PARENT
+            obj_parent = parent_uuid
             obj["STEP_parent"] = obj_parent
             obj["STEP_uuid"] = self_uuid
             obj["STEP_file"] = filepath
@@ -570,7 +570,9 @@ def load_step(
             hierarchy_collections = build_hierarchy_collection(
                 tree, created_objs, filename
             )
-            build_collection_instances(instanced_objects, hierarchy_collections, scale_final)
+            build_collection_instances(
+                instanced_objects, hierarchy_collections, scale_final
+            )
 
     transform_to_up(up_as[0], created_objs, scale_final)
 

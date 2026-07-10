@@ -426,7 +426,6 @@ class ReadSTEP:
         else:
             print("DataExchange: Transfer done")
 
-
         self.doc = doc
 
     def read_file(self):
@@ -731,7 +730,7 @@ class ReadSTEP:
                 * 2,  # probably because tolerence range and not max distance
                 False,
                 ang_def,
-                False,
+                True,  # parallel
             )
             brepmesh.Perform()
             trf = shp.Location().Transformation()

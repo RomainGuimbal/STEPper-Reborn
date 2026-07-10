@@ -62,7 +62,7 @@ lin_deflection_prop = bpy.props.FloatProperty(
 
 ang_deflection_prop = bpy.props.FloatProperty(
     name="Angular Deflection",
-    description="Max angle between the tangent plane and the surrounding mesh of samples. Smaller values increase polygon count",
+    description="Max angle between the tangent plane and the surrounding mesh each of sample point. Smaller values increase polygon count",
     default=0.0872664,  # 5° (in radian)
     soft_min=0.00174532925,  # 0.1°
     min=0.000001745,  # 0.0001°

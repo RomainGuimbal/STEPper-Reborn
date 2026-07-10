@@ -529,9 +529,6 @@ def load_step(
                 created_objs.append(obj)
                 created_names[shape_name] = obj
 
-                # bpy.ops.object.mode_set(mode="OBJECT")
-                # build_mesh(step_reader, obj, shp, lin_deflection, ang_deflection)
-
         # No shape in leaf, empty creation enabled, do this
         elif htypes == HierarchyType.EMPTIES_TREE:
             # Create empty

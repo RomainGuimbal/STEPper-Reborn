@@ -50,7 +50,8 @@ def calculate_deflections_for_artist_friendly(dlev):
         -2.3818 * math.log10(dlev) + 0.016152 * (math.log10(dlev)) ** 2
     )
 
-    return 1.5, l_def
+    # 0.8 ~= 45°
+    return 0.8, l_def
 
 
 def create_new_obj_with_mesh(name, set_active=True):

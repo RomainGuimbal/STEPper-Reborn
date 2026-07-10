@@ -62,8 +62,9 @@ from OCP.XSControl import XSControl_WorkSession
 from OCP.UnitsMethods import (
     UnitsMethods_LengthUnit_Meter,
 )
+
 # from OCP.Interface import Interface_Static
-from OCP.IMeshTools import IMeshTools_Parameters
+from OCP.IMeshTools import IMeshTools_Parameters #, IMeshTools_MeshAlgoType
 from OCP.Precision import Precision
 
 from .trimesh import TrianglesData, TriMesh
@@ -715,18 +716,18 @@ class ReadSTEP:
             if not ex.More():
                 self.import_problems["Empty shape"] += 1
                 continue
-            
+
             param = IMeshTools_Parameters()
-            param.Deflection = lin_def_bl_unit * 2  # probably because tolerence range and not max distance)
+            param.Deflection = (
+                lin_def_bl_unit * 2
+            )  # probably because tolerence range and not max distance)
             param.Angle = ang_def
             param.InParallel = True
             param.Relative = False
             param.MinSize = Precision.Confusion_s()
-            
-            brepmesh = BRepMesh_IncrementalMesh(
-                shp,
-                param
-            )
+            # param.MeshAlgo = IMeshTools_MeshAlgoType.IMeshTools_MeshAlgoType_Delabella
+
+            brepmesh = BRepMesh_IncrementalMesh(shp, param)
             brepmesh.Perform()
             trf = shp.Location().Transformation()
 

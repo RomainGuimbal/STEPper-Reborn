@@ -60,19 +60,11 @@ from OCP.XCAFDoc import (
 )
 from OCP.XSControl import XSControl_WorkSession
 from OCP.UnitsMethods import (
-    UnitsMethods_LengthUnit_Undefined,
-    UnitsMethods_LengthUnit_Inch,
-    UnitsMethods_LengthUnit_Millimeter,
-    UnitsMethods_LengthUnit_Foot,
-    UnitsMethods_LengthUnit_Mile,
     UnitsMethods_LengthUnit_Meter,
-    UnitsMethods_LengthUnit_Kilometer,
-    UnitsMethods_LengthUnit_Mil,
-    UnitsMethods_LengthUnit_Micron,
-    UnitsMethods_LengthUnit_Centimeter,
-    UnitsMethods_LengthUnit_Microinch,
 )
-from OCP.Interface import Interface_Static
+# from OCP.Interface import Interface_Static
+from OCP.IMeshTools import IMeshTools_Parameters
+from OCP.Precision import Precision
 
 from .trimesh import TrianglesData, TriMesh
 
@@ -723,14 +715,17 @@ class ReadSTEP:
             if not ex.More():
                 self.import_problems["Empty shape"] += 1
                 continue
-
+            
+            param = IMeshTools_Parameters()
+            param.Deflection = lin_def_bl_unit * 2  # probably because tolerence range and not max distance)
+            param.Angle = ang_def
+            param.InParallel = True
+            param.Relative = False
+            param.MinSize = Precision.Confusion_s()
+            
             brepmesh = BRepMesh_IncrementalMesh(
                 shp,
-                lin_def_bl_unit
-                * 2,  # probably because tolerence range and not max distance
-                False,
-                ang_def,
-                True,  # parallel
+                param
             )
             brepmesh.Perform()
             trf = shp.Location().Transformation()

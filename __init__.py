@@ -55,7 +55,7 @@ lin_deflection_prop = bpy.props.FloatProperty(
     name="Linear Deflection",
     description="Max distance between the mesh and the theoretical shape. Smaller values increase polygon count. In Blender unit",
     default=0.002,  # 2mm (if STEP:mm  and blender:m)
-    soft_min=0.00001,  # 0.01mm
+    soft_min=0.0001,  # 0.1mm
     unit="LENGTH",
     step=0.01,
 )
@@ -166,7 +166,12 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
     )
 
     scale_overwritten: bpy.props.FloatProperty(
-        name="Scale", description="Set object scale", default=0.001, soft_min=0.00001
+        name="Scale",
+        description="Set object scale",
+        default=1,
+        soft_min=0.001,
+        soft_max=1000,
+        precision=5,
     )
 
     lin_deflection_bl_unit: lin_deflection_prop

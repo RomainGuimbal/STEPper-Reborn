@@ -402,8 +402,7 @@ def build_collection_instances(instanced_objects, hierarchy_collections, scale):
         empty.instance_type = "COLLECTION"
         empty.instance_collection = component_col
         empty.matrix_world = trsf
-        empty.location *= scale
-        empty.empty_display_size = scale
+        empty.empty_display_size = scale*0.001
         parent_collection.objects.link(empty)
 
         # instance copies
@@ -412,7 +411,7 @@ def build_collection_instances(instanced_objects, hierarchy_collections, scale):
             empty = bpy.data.objects.new(source_obj.name + "_instance", None)
             empty.instance_type = "COLLECTION"
             empty.instance_collection = component_col
-            empty.empty_display_size = scale
+            empty.empty_display_size = scale*0.001
             scale_translation(global_t, scale)
             set_obj_matrix_world(empty, global_t)
             parent_col = hierarchy_collections.get(
@@ -542,7 +541,7 @@ def load_step(
         if obj:
             # assign property to obj
             obj["STEP_tag"] = tag
-            obj_parent = parent_uuid if parent_uuid != 0 else ROOT_PARENT
+            obj_parent = parent_uuid #if parent_uuid != 0 else ROOT_PARENT
             obj["STEP_parent"] = obj_parent
             obj["STEP_uuid"] = self_uuid
             obj["STEP_file"] = filepath

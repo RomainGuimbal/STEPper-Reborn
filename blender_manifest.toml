@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "stepper_reborn"
-version = "2.2.0"
+version = "2.3.0"
 name = "STEPper Reborn"
 tagline = "CAD importer"
 maintainer = "Romain Guimbal"

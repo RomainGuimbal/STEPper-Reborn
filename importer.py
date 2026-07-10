@@ -584,11 +584,11 @@ class ReadSTEP:
             if x < Umin:
                 Umin = x
             if x > Umax:
-                Umin = x
+                Umax = x
             if y < Vmin:
                 Vmin = y
             if y > Vmax:
-                Vmin = y
+                Vmax = y
 
         Ucenter = (Umin + Umax) * 0.5
         Vcenter = (Vmin + Vmax) * 0.5

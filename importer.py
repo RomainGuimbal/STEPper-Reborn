@@ -358,53 +358,6 @@ class ReadSTEP:
         # reader.SetLayerMode(True)
 
         # Scale
-        # Read simple STEP file for correct units
-        session = XSControl_WorkSession()
-        step_simple_reader = STEPControl_Reader(session)
-
-        status = step_simple_reader.ReadFile(file)
-        if status != IFSelect_RetDone:
-            raise AssertionError("Error: can't read file. File possibly damaged.")
-
-        # https://dev.opencascade.org/content/loading-step-file-crashes-edgeloop
-        # Default is 1, try also 0
-        # Interface_Static.SetVal("read.surfacecurve.mode", 3)
-
-        # read units
-        ulen_names = TColStd_SequenceOfAsciiString()
-        uang_names = TColStd_SequenceOfAsciiString()
-        usld_names = TColStd_SequenceOfAsciiString()
-        step_simple_reader.FileUnits(ulen_names, uang_names, usld_names)
-
-        # # Info about unit conversions
-        # # https://dev.opencascade.org/content/step-unit-conversion-and-meshing
-
-        # # for i in range(ulen_names.Length()):
-        # #     ulen = ulen_names.Value(i + 1)
-        # #     uang = uang_names.Value(i + 1)
-        # #     usld = usld_names.Value(i + 1)
-        # #     print(ulen.ToCString(), uang.ToCString(), usld.ToCString())
-
-        # if ulen_names.Length() > 0:
-        #     unitname = ulen_names.Value(1).ToCString().lower()
-
-        #     scales_map = {
-        #         "millimeter": 1,
-        #         "millimetre": 1,
-        #         "centimeter": 10,
-        #         "centimetre": 10,
-        #         "kilometer": 1000000.0,
-        #         "kilometre": 1000000.0,
-        #         "meter": 1000.0,
-        #         "metre": 1000.0,
-        #         "inch": 25.4,
-        #         "foot": 304.8,
-        #         "mile": 1609340,
-        #         "mil": 0.0254,
-        #     }
-
-        #     scale = scales_map.get(unitname, 1.0)
-        #     print(scale)
         XCAFDoc_DocumentTool.SetLengthUnit_s(doc, 1, UnitsMethods_LengthUnit_Meter)
 
         # Read

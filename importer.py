@@ -278,6 +278,30 @@ class ReadSTEP:
 
         return color, colortype, iscolorset
 
+
+    def query_color_by_shape(self, shape, overwrite=False):
+        """
+        Query color for a shape directly without needing a label.
+        Args:
+            shape: TopoDS_Shape
+        """
+        # default color = pink
+        color = Quantity_Color(1.0, 0.0, 1.0, Quantity_TOC_RGB)
+        iscolorset = False
+        colortype = None
+
+        # Overwrites each type
+        c_gen_exists = self.color_tool.GetColor(shape, XCAFDoc_ColorGen, color)
+        c_surf_exists = self.color_tool.GetColor(shape, XCAFDoc_ColorSurf, color)
+        c_curv_exists = False  # self.color_tool.GetColor(shape, XCAFDoc_ColorCurv, color) Supposed to be a fallback but overwrite't
+
+        if c_gen_exists or c_surf_exists or c_curv_exists:
+            iscolorset = True
+            # Color priority (1/type) is the same as CAD assistant material tree display
+            colortype = c_gen_exists * 1 + c_surf_exists * 2 + c_curv_exists * 3
+
+        return color, colortype, iscolorset
+
     def print_all_colors(self):
         tcol = Quantity_Color(1.0, 0.0, 1.0, Quantity_TOC_RGB)
         clabs = TDF_LabelSequence()
@@ -691,11 +715,23 @@ class ReadSTEP:
 
                 mesh = self.triangulate_face(face, trf, brep_tool)
                 if mesh:
-                    # If shape or sub-shape has defined color, set it so
+                    # Check if this face has its own color
+                    face_col = col
+                    face_col_rgb = col_rgb
+                    face_col_name = col_name
+                    
+                    # Try to get color for this specific face
+                    c, color_type, has_color = self.query_color_by_shape(face)
+                    if has_color:
+                        face_col = c
+                        face_col_rgb = b_RGB(c)
+                        face_col_name = b_colorname(c)
+                    
+                    # If shape or sub-shape or face has defined color, set it so
                     mesh.set_batch(batch)
-                    if col is not None:
-                        mesh.colorize(col_rgb)
-                        mesh.set_material_name(col_name)
+                    if face_col is not None:
+                        mesh.colorize(face_col_rgb)
+                        mesh.set_material_name(face_col_name)
 
                     # First filter in overwriting a face/color
                     face_data[face] = (0, mesh, "EMPTY")

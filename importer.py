@@ -64,7 +64,7 @@ from OCP.UnitsMethods import (
 )
 
 # from OCP.Interface import Interface_Static
-from OCP.IMeshTools import IMeshTools_Parameters #, IMeshTools_MeshAlgoType
+from OCP.IMeshTools import IMeshTools_Parameters  # , IMeshTools_MeshAlgoType
 from OCP.Precision import Precision
 
 from .trimesh import TrianglesData, TriMesh
@@ -527,14 +527,10 @@ class ReadSTEP:
             x, y = v.X(), v.Y()
             if t == 1:
                 Umin, Umax, Vmin, Vmax = x, x, y, y
-            if x < Umin:
-                Umin = x
-            if x > Umax:
-                Umax = x
-            if y < Vmin:
-                Vmin = y
-            if y > Vmax:
-                Vmax = y
+            Umin = min(Umin, x)
+            Umax = max(Umax, x)
+            Vmin = min(Vmin, y)
+            Vmax = max(Vmax, y)
 
         Ucenter = (Umin + Umax) * 0.5
         Vcenter = (Vmin + Vmax) * 0.5

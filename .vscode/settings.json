@@ -1,5 +1,11 @@
 {
     "python.analysis.diagnosticSeverityOverrides": {
         "reportInvalidTypeForm": "none"
-    }
+    },
+    "python.terminal.useEnvFile": true,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
 }

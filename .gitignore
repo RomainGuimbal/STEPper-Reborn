@@ -1,5 +1,8 @@
 *.blend1
 *.pyc
 *.pdf
+*.json
+
+.env
 
 __pycache__/

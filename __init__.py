@@ -15,16 +15,18 @@
 #
 # Modified 2025 Romain Guimbal
 
-import os
 import math
+import os
+
 import bpy
-from bpy.props import StringProperty
-from bpy_extras.io_utils import ImportHelper
+from bpy.props import StringProperty  # type: ignore
+from bpy_extras.io_utils import ImportHelper  # type: ignore
+
 from .object_generator import (
-    HierarchyType,
-    load_step,
-    build_mesh,
     GLOBAL_FILE_CACHE,
+    HierarchyType,
+    build_mesh,
+    load_step,
 )
 from .utils import calculate_deflections_for_artist_friendly
 
@@ -132,7 +134,7 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
     bl_idname = "wm.occ_import_step"
     bl_label = "Import STEP"
     bl_description = "Import a STEP file"
-    bl_options = {"PRESET"}
+    bl_options = {"PRESET"}  # noqa: RUF012
 
     filter_glob: StringProperty(default="*.step;*.stp;*.st", options={"HIDDEN"})
     files: bpy.props.CollectionProperty(type=bpy.types.PropertyGroup)
@@ -312,7 +314,7 @@ class STEP_OT_FixASCII(bpy.types.Operator):
 
     def execute(self, context):
         from pathlib import Path
-        import unicodedata
+        # import unicodedata
 
         print("Attempting to format STEP file as ASCII")
         i_file = context.scene.stepper.fix_ascii_file
@@ -326,13 +328,12 @@ class STEP_OT_FixASCII(bpy.types.Operator):
         print(p.stat().st_size // 1024, "kB")
 
         outf = Path(p.parent, Path(p.stem.replace(" ", "_") + "_fix.step"))
-        with outf.open("w", encoding="ASCII") as fo:
-            with p.open("rb") as f:
-                content = bytearray(f.read())
-                content = content.replace(b"\r\n", b"\n")
-                content = content.replace(b",\n", b",")
-                content = content.replace(b"(\n", b"(")
-                fo.write(content.decode("ASCII", errors="ignore"))
+        with outf.open("w", encoding="ASCII") as fo, p.open("rb") as f:
+            content = bytearray(f.read())
+            content = content.replace(b"\r\n", b"\n")
+            content = content.replace(b",\n", b",")
+            content = content.replace(b"(\n", b"(")
+            fo.write(content.decode("ASCII", errors="ignore"))
 
         self.report(
             {"INFO"},
@@ -421,7 +422,7 @@ class STEP_OT_RebuildSelected(bpy.types.Operator):
                 tree = step_reader.tree
 
             for shp, node_index in tree.get_shapes():
-                _, _, tag, name, _, _, _ = tree.nodes[node_index].get_values()
+                _, _, tag, _, _, _, _ = tree.nodes[node_index].get_values()
                 if tag == sel_tag:
                     rebuilt_meshes.add(sel_tag)
                     print("Rebuilding:", sel_tag, obj.data.name)

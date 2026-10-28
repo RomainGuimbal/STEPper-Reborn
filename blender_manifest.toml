@@ -37,4 +37,6 @@ paths_exclude_pattern = [
   ".gitignore",
   ".gitattributes",
   "README.md",
+  "/tests/",
+  "*.json",
 ]

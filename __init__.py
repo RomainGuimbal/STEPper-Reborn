@@ -137,7 +137,9 @@ class STEP_OT_ImportStepCADOperator(bpy.types.Operator, ImportHelper):
     bl_options = {"PRESET"}  # noqa: RUF012
 
     filter_glob: StringProperty(default="*.step;*.stp;*.st", options={"HIDDEN"})
-    files: bpy.props.CollectionProperty(type=bpy.types.PropertyGroup)
+    files: bpy.props.CollectionProperty(
+        type=bpy.types.OperatorFileListElement, options={"HIDDEN", "SKIP_SAVE"}
+    )
     override_file: StringProperty(default="", options={"HIDDEN"})
 
     fw_as: bpy.props.EnumProperty(
@@ -314,6 +316,7 @@ class STEP_OT_FixASCII(bpy.types.Operator):
 
     def execute(self, context):
         from pathlib import Path
+
         # import unicodedata
 
         print("Attempting to format STEP file as ASCII")
